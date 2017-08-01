@@ -27,19 +27,19 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.MapMaker;
 import io.druid.data.input.MapBasedInputRow;
 import io.druid.jackson.DefaultObjectMapper;
-import io.druid.java.util.common.granularity.Granularities;
 import io.druid.java.util.common.guava.Sequences;
+import io.druid.query.DefaultGenericQueryMetricsFactory;
 import io.druid.query.Druids;
+import io.druid.query.GenericQueryMetricsFactory;
 import io.druid.query.Query;
+import io.druid.query.QueryContexts;
 import io.druid.query.QueryRunner;
 import io.druid.query.QueryRunnerFactory;
 import io.druid.query.QueryRunnerTestHelper;
 import io.druid.query.Result;
-import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.CountAggregatorFactory;
 import io.druid.segment.IncrementalIndexSegment;
 import io.druid.segment.incremental.IncrementalIndex;
-import io.druid.segment.incremental.OnheapIncrementalIndex;
 import io.druid.timeline.LogicalSegment;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
@@ -99,7 +99,7 @@ public class DataSourceMetadataQueryTest
         ), Query.class
     );
 
-    Assert.assertEquals(1, serdeQuery.getContextValue("priority"));
+    Assert.assertEquals(1, serdeQuery.getContextValue(QueryContexts.PRIORITY_KEY));
     Assert.assertEquals(true, serdeQuery.getContextValue("useCache"));
     Assert.assertEquals("true", serdeQuery.getContextValue("populateCache"));
     Assert.assertEquals(true, serdeQuery.getContextValue("finalize"));
@@ -111,12 +111,14 @@ public class DataSourceMetadataQueryTest
   @Test
   public void testMaxIngestedEventTime() throws Exception
   {
-    final IncrementalIndex rtIndex = new OnheapIncrementalIndex(
-        0L, Granularities.NONE, new AggregatorFactory[]{new CountAggregatorFactory("count")}, 1000
-    );
-    ;
+    final IncrementalIndex rtIndex = new IncrementalIndex.Builder()
+        .setSimpleTestingIndexSchema(new CountAggregatorFactory("count"))
+        .setMaxRowCount(1000)
+        .buildOnheap();
+
     final QueryRunner runner = QueryRunnerTestHelper.makeQueryRunner(
         (QueryRunnerFactory) new DataSourceMetadataQueryRunnerFactory(
+            new DataSourceQueryQueryToolChest(DefaultGenericQueryMetricsFactory.instance()),
             QueryRunnerTestHelper.NOOP_QUERYWATCHER
         ), new IncrementalIndexSegment(rtIndex, "test"),
         null
@@ -147,7 +149,10 @@ public class DataSourceMetadataQueryTest
   @Test
   public void testFilterSegments()
   {
-    List<LogicalSegment> segments = new DataSourceQueryQueryToolChest().filterSegments(
+    GenericQueryMetricsFactory queryMetricsFactory = DefaultGenericQueryMetricsFactory.instance();
+    DataSourceQueryQueryToolChest toolChest = new DataSourceQueryQueryToolChest(queryMetricsFactory);
+    List<LogicalSegment> segments = toolChest
+        .filterSegments(
         null,
         Arrays.asList(
             new LogicalSegment()

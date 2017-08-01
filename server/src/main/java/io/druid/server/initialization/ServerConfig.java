@@ -37,6 +37,20 @@ public class ServerConfig
   @NotNull
   private Period maxIdleTime = new Period("PT5m");
 
+  @JsonProperty
+  @Min(0)
+  private long defaultQueryTimeout = 300_000; // 5 minutes
+
+  @JsonProperty
+  @Min(1)
+  private long maxScatterGatherBytes = Long.MAX_VALUE;
+
+  @JsonProperty
+  private boolean plaintext = true;
+
+  @JsonProperty
+  private boolean tls = false;
+
   public int getNumThreads()
   {
     return numThreads;
@@ -47,12 +61,36 @@ public class ServerConfig
     return maxIdleTime;
   }
 
+  public long getDefaultQueryTimeout()
+  {
+    return defaultQueryTimeout;
+  }
+
+  public long getMaxScatterGatherBytes()
+  {
+    return maxScatterGatherBytes;
+  }
+
+  public boolean isPlaintext()
+  {
+    return plaintext;
+  }
+
+  public boolean isTls()
+  {
+    return tls;
+  }
+
   @Override
   public String toString()
   {
     return "ServerConfig{" +
-        "numThreads=" + numThreads +
-        ", maxIdleTime=" + maxIdleTime +
-        '}';
+           "numThreads=" + numThreads +
+           ", maxIdleTime=" + maxIdleTime +
+           ", defaultQueryTimeout=" + defaultQueryTimeout +
+           ", maxScatterGatherBytes=" + maxScatterGatherBytes +
+           ", plaintext=" + plaintext +
+           ", tls=" + tls +
+           '}';
   }
 }

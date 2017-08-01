@@ -59,7 +59,7 @@ public class BenchmarkColumnValueGenerator
     int rowSize = schema.getRowSize();
 
     if (nullProbability != null) {
-      Double randDouble = simpleRng.nextDouble();
+      double randDouble = simpleRng.nextDouble();
       if (randDouble <= nullProbability) {
         return null;
       }
@@ -208,7 +208,7 @@ public class BenchmarkColumnValueGenerator
       ((AbstractIntegerDistribution) distribution).reseedRandomGenerator(seed);
     } else if (distribution instanceof AbstractRealDistribution) {
       ((AbstractRealDistribution) distribution).reseedRandomGenerator(seed);
-    } else if (distribution instanceof EnumeratedDistribution) {
+    } else {
       ((EnumeratedDistribution) distribution).reseedRandomGenerator(seed);
     }
   }

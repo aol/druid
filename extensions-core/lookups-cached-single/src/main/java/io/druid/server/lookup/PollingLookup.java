@@ -215,7 +215,10 @@ public class PollingLookup extends LookupExtractor
     private final PollingCache pollingCache;
     private final AtomicLong refCounts = new AtomicLong(0L);
 
-    CacheRefKeeper(PollingCache pollingCache) {this.pollingCache = pollingCache;}
+    CacheRefKeeper(PollingCache pollingCache)
+    {
+      this.pollingCache = pollingCache;
+    }
 
     PollingCache getAndIncrementRef()
     {
@@ -239,4 +242,12 @@ public class PollingLookup extends LookupExtractor
     }
   }
 
+  @Override
+  public String toString()
+  {
+    return "PollingLookup{" +
+           "dataFetcher=" + dataFetcher +
+           ", id='" + id + '\'' +
+           '}';
+  }
 }

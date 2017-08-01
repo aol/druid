@@ -58,7 +58,8 @@ import java.util.Map;
     @JsonSubTypes.Type(name = "version_converter", value = ConvertSegmentBackwardsCompatibleTask.class), // Backwards compat - Deprecated
     @JsonSubTypes.Type(name = "version_converter_sub", value = ConvertSegmentBackwardsCompatibleTask.SubTask.class), // backwards compat - Deprecated
     @JsonSubTypes.Type(name = "convert_segment", value = ConvertSegmentTask.class),
-    @JsonSubTypes.Type(name = "convert_segment_sub", value = ConvertSegmentTask.SubTask.class)
+    @JsonSubTypes.Type(name = "convert_segment_sub", value = ConvertSegmentTask.SubTask.class),
+    @JsonSubTypes.Type(name = "same_interval_merge", value = SameIntervalMergeTask.class)
 })
 public interface Task
 {
@@ -78,10 +79,10 @@ public interface Task
   public String getGroupId();
 
   /**
-   * Returns a {@link io.druid.indexing.common.task.TaskResource} for this task. Task resources define specific
-   * worker requirements a task may require.
+   * Returns a {@link TaskResource} for this task. Task resources define specific worker requirements a task may
+   * require.
    *
-   * @return {@link io.druid.indexing.common.task.TaskResource} for this task
+   * @return {@link TaskResource} for this task
    */
   public TaskResource getTaskResource();
 

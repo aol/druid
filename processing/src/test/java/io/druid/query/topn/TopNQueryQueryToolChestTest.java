@@ -23,11 +23,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import io.druid.jackson.DefaultObjectMapper;
 import io.druid.java.util.common.granularity.Granularities;
 import io.druid.java.util.common.guava.Sequence;
 import io.druid.query.CacheStrategy;
-import io.druid.query.Query;
+import io.druid.query.QueryPlus;
 import io.druid.query.QueryRunner;
 import io.druid.query.QueryRunnerFactory;
 import io.druid.query.QueryRunnerTestHelper;
@@ -43,6 +42,7 @@ import io.druid.query.aggregation.post.FieldAccessPostAggregator;
 import io.druid.query.dimension.DefaultDimensionSpec;
 import io.druid.query.spec.MultipleIntervalSegmentSpec;
 import io.druid.segment.IncrementalIndexSegment;
+import io.druid.segment.TestHelper;
 import io.druid.segment.TestIndex;
 import io.druid.segment.VirtualColumns;
 import org.joda.time.DateTime;
@@ -101,7 +101,7 @@ public class TopNQueryQueryToolChestTest
         result
     );
 
-    ObjectMapper objectMapper = new DefaultObjectMapper();
+    ObjectMapper objectMapper = TestHelper.getJsonMapper();
     Object fromCacheValue = objectMapper.readValue(
         objectMapper.writeValueAsBytes(preparedValue),
         strategy.getCacheObjectClazz()
@@ -211,7 +211,7 @@ public class TopNQueryQueryToolChestTest
         .dimension(QueryRunnerTestHelper.placementishDimension)
         .metric(QueryRunnerTestHelper.indexMetric)
         .intervals(QueryRunnerTestHelper.fullOnInterval)
-        .aggregators(QueryRunnerTestHelper.commonAggregators);
+        .aggregators(QueryRunnerTestHelper.commonDoubleAggregators);
 
     TopNQuery query1 = builder.threshold(10).context(null).build();
     MockQueryRunner mockRunner = new MockQueryRunner(runner);
@@ -243,11 +243,11 @@ public class TopNQueryQueryToolChestTest
 
     @Override
     public Sequence<Result<TopNResultValue>> run(
-        Query<Result<TopNResultValue>> query,
+        QueryPlus<Result<TopNResultValue>> queryPlus,
         Map<String, Object> responseContext
     )
     {
-      this.query = (TopNQuery) query;
+      this.query = (TopNQuery) queryPlus.getQuery();
       return query.run(runner, responseContext);
     }
   }

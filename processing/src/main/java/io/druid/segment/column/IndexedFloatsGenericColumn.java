@@ -19,6 +19,7 @@
 
 package io.druid.segment.column;
 
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.data.Indexed;
 import io.druid.segment.data.IndexedFloats;
 import io.druid.segment.data.IndexedLongs;
@@ -29,9 +30,8 @@ public class IndexedFloatsGenericColumn implements GenericColumn
 {
   private final IndexedFloats column;
 
-  public IndexedFloatsGenericColumn(
-      final IndexedFloats column
-  ) {
+  public IndexedFloatsGenericColumn(final IndexedFloats column)
+  {
     this.column = column;
   }
 
@@ -90,8 +90,20 @@ public class IndexedFloatsGenericColumn implements GenericColumn
   }
 
   @Override
+  public double getDoubleSingleValueRow(int rowNum)
+  {
+    return (double) column.get(rowNum);
+  }
+
+  @Override
   public void close()
   {
     column.close();
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    inspector.visit("column", column);
   }
 }

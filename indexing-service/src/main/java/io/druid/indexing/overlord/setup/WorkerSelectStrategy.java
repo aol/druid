@@ -35,6 +35,7 @@ import io.druid.indexing.overlord.config.WorkerTaskRunnerConfig;
     @JsonSubTypes.Type(name = "fillCapacity", value = FillCapacityWorkerSelectStrategy.class),
     @JsonSubTypes.Type(name = "fillCapacityWithAffinity", value = FillCapacityWithAffinityWorkerSelectStrategy.class),
     @JsonSubTypes.Type(name = "equalDistribution", value = EqualDistributionWorkerSelectStrategy.class),
+    @JsonSubTypes.Type(name = "equalDistributionWithAffinity", value = EqualDistributionWithAffinityWorkerSelectStrategy.class),
     @JsonSubTypes.Type(name = "javascript", value = JavaScriptWorkerSelectStrategy.class)
 })
 public interface WorkerSelectStrategy
@@ -46,7 +47,7 @@ public interface WorkerSelectStrategy
    * @param zkWorkers An immutable map of workers to choose from.
    * @param task      The task to assign.
    *
-   * @return A {@link io.druid.indexing.overlord.ImmutableWorkerInfo} to run the task if one is available.
+   * @return A {@link ImmutableWorkerInfo} to run the task if one is available.
    */
   Optional<ImmutableWorkerInfo> findWorkerForTask(
       final WorkerTaskRunnerConfig config,

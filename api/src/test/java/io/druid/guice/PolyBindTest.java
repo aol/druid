@@ -32,6 +32,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Properties;
 
 /**
@@ -46,7 +47,7 @@ public class PolyBindTest
     props = new Properties();
     injector = Guice.createInjector(
         Iterables.concat(
-            Arrays.asList(
+            Collections.singletonList(
                 new Module()
                 {
                   @Override
@@ -54,7 +55,7 @@ public class PolyBindTest
                   {
                     binder.bind(Properties.class).toInstance(props);
                     PolyBind.createChoice(binder, "billy", Key.get(Gogo.class), Key.get(GoA.class));
-                    PolyBind.createChoiceWithDefault(binder, "sally", Key.get(GogoSally.class), null, "b");
+                    PolyBind.createChoiceWithDefault(binder, "sally", Key.get(GogoSally.class), "b");
 
                   }
                 }
@@ -106,9 +107,23 @@ public class PolyBindTest
     Assert.assertEquals("B", injector.getInstance(Gogo.class).go());
     Assert.assertEquals("A", injector.getInstance(Key.get(Gogo.class, Names.named("reverse"))).go());
     props.setProperty("billy", "c");
-    Assert.assertEquals("A", injector.getInstance(Gogo.class).go());
-    Assert.assertEquals("B", injector.getInstance(Key.get(Gogo.class, Names.named("reverse"))).go());
-
+    try {
+      Assert.assertEquals("A", injector.getInstance(Gogo.class).go());
+      Assert.fail(); // should never be reached
+    }
+    catch (Exception e) {
+      Assert.assertTrue(e instanceof ProvisionException);
+      Assert.assertTrue(e.getMessage().contains("Unknown provider[c] of Key[type=io.druid.guice.PolyBindTest$Gogo"));
+    }
+    try {
+      Assert.assertEquals("B", injector.getInstance(Key.get(Gogo.class, Names.named("reverse"))).go());
+      Assert.fail(); // should never be reached
+    }
+    catch (Exception e) {
+      Assert.assertTrue(e instanceof ProvisionException);
+      Assert.assertTrue(e.getMessage().contains("Unknown provider[c] of Key[type=io.druid.guice.PolyBindTest$Gogo"));
+    }
+    
     // test default property value
     Assert.assertEquals("B", injector.getInstance(GogoSally.class).go());
     props.setProperty("sally", "a");
@@ -119,7 +134,8 @@ public class PolyBindTest
     try {
       injector.getInstance(GogoSally.class).go();
       Assert.fail(); // should never be reached
-    } catch(Exception e) {
+    }
+    catch (Exception e) {
       Assert.assertTrue(e instanceof ProvisionException);
       Assert.assertTrue(e.getMessage().contains("Unknown provider[c] of Key[type=io.druid.guice.PolyBindTest$GogoSally"));
     }

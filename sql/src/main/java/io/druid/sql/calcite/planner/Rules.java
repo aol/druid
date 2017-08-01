@@ -21,6 +21,7 @@ package io.druid.sql.calcite.planner;
 
 import com.google.common.collect.ImmutableList;
 import io.druid.sql.calcite.rel.QueryMaker;
+import io.druid.sql.calcite.rule.CaseFilteredAggregatorRule;
 import io.druid.sql.calcite.rule.DruidFilterRule;
 import io.druid.sql.calcite.rule.DruidRelToBindableRule;
 import io.druid.sql.calcite.rule.DruidRelToDruidRule;
@@ -28,9 +29,11 @@ import io.druid.sql.calcite.rule.DruidSemiJoinRule;
 import io.druid.sql.calcite.rule.DruidTableScanRule;
 import io.druid.sql.calcite.rule.GroupByRules;
 import io.druid.sql.calcite.rule.SelectRules;
+import io.druid.sql.calcite.rule.SortCollapseRule;
 import org.apache.calcite.interpreter.Bindables;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.volcano.AbstractConverter;
+import org.apache.calcite.rel.rules.AggregateExpandDistinctAggregatesRule;
 import org.apache.calcite.rel.rules.AggregateJoinTransposeRule;
 import org.apache.calcite.rel.rules.AggregateProjectMergeRule;
 import org.apache.calcite.rel.rules.AggregateProjectPullUpConstantsRule;
@@ -157,42 +160,42 @@ public class Rules
     // No instantiation.
   }
 
-  public static List<Program> programs(final QueryMaker queryMaker, final DruidOperatorTable operatorTable)
+  public static List<Program> programs(final PlannerContext plannerContext, final QueryMaker queryMaker)
   {
     return ImmutableList.of(
-        Programs.ofRules(druidConventionRuleSet(queryMaker, operatorTable)),
-        Programs.ofRules(bindableConventionRuleSet(queryMaker, operatorTable))
+        Programs.ofRules(druidConventionRuleSet(plannerContext, queryMaker)),
+        Programs.ofRules(bindableConventionRuleSet(plannerContext, queryMaker))
     );
   }
 
   private static List<RelOptRule> druidConventionRuleSet(
-      final QueryMaker queryMaker,
-      final DruidOperatorTable operatorTable
+      final PlannerContext plannerContext,
+      final QueryMaker queryMaker
   )
   {
     return ImmutableList.<RelOptRule>builder()
-        .addAll(baseRuleSet(queryMaker, operatorTable))
+        .addAll(baseRuleSet(plannerContext, queryMaker))
         .add(DruidRelToDruidRule.instance())
         .build();
   }
 
   private static List<RelOptRule> bindableConventionRuleSet(
-      final QueryMaker queryMaker,
-      final DruidOperatorTable operatorTable
+      final PlannerContext plannerContext,
+      final QueryMaker queryMaker
   )
   {
     return ImmutableList.<RelOptRule>builder()
-        .addAll(baseRuleSet(queryMaker, operatorTable))
+        .addAll(baseRuleSet(plannerContext, queryMaker))
         .addAll(Bindables.RULES)
         .build();
   }
 
   private static List<RelOptRule> baseRuleSet(
-      final QueryMaker queryMaker,
-      final DruidOperatorTable operatorTable
+      final PlannerContext plannerContext,
+      final QueryMaker queryMaker
   )
   {
-    final PlannerConfig plannerConfig = queryMaker.getPlannerContext().getPlannerConfig();
+    final PlannerConfig plannerConfig = plannerContext.getPlannerConfig();
     final ImmutableList.Builder<RelOptRule> rules = ImmutableList.builder();
 
     // Calcite rules.
@@ -202,20 +205,29 @@ public class Rules
     rules.addAll(VOLCANO_ABSTRACT_RULES);
     rules.addAll(RELOPTUTIL_ABSTRACT_RULES);
 
+    if (!plannerConfig.isUseApproximateCountDistinct()) {
+      // We'll need this to expand COUNT DISTINCTs.
+      // Avoid AggregateExpandDistinctAggregatesRule.INSTANCE; it uses grouping sets and we don't support those.
+      rules.add(AggregateExpandDistinctAggregatesRule.JOIN);
+    }
+
     if (plannerConfig.isUseFallback()) {
       rules.add(DruidRelToBindableRule.instance());
     }
 
+    rules.add(SortCollapseRule.instance());
+    rules.add(CaseFilteredAggregatorRule.instance());
+
     // Druid-specific rules.
-    rules.add(new DruidTableScanRule(queryMaker));
-    rules.add(DruidFilterRule.instance());
+    rules.add(new DruidTableScanRule(plannerContext, queryMaker));
+    rules.add(new DruidFilterRule());
 
     if (plannerConfig.getMaxSemiJoinRowsInMemory() > 0) {
       rules.add(DruidSemiJoinRule.instance());
     }
 
     rules.addAll(SelectRules.rules());
-    rules.addAll(GroupByRules.rules(operatorTable));
+    rules.addAll(GroupByRules.rules());
 
     return rules.build();
   }

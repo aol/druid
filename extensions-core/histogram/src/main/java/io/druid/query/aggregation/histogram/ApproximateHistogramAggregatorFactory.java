@@ -31,20 +31,20 @@ import io.druid.java.util.common.StringUtils;
 import io.druid.query.aggregation.Aggregator;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.AggregatorFactoryNotMergeableException;
+import io.druid.query.aggregation.AggregatorUtil;
 import io.druid.query.aggregation.BufferAggregator;
 import io.druid.segment.ColumnSelectorFactory;
 import org.apache.commons.codec.binary.Base64;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 @JsonTypeName("approxHistogram")
 public class ApproximateHistogramAggregatorFactory extends AggregatorFactory
 {
-  private static final byte CACHE_TYPE_ID = 12;
-
   protected final String name;
   protected final String fieldName;
 
@@ -225,7 +225,7 @@ public class ApproximateHistogramAggregatorFactory extends AggregatorFactory
   @Override
   public List<String> requiredFields()
   {
-    return Arrays.asList(fieldName);
+    return Collections.singletonList(fieldName);
   }
 
   @Override
@@ -233,7 +233,7 @@ public class ApproximateHistogramAggregatorFactory extends AggregatorFactory
   {
     byte[] fieldNameBytes = StringUtils.toUtf8(fieldName);
     return ByteBuffer.allocate(1 + fieldNameBytes.length + Ints.BYTES * 2 + Floats.BYTES * 2)
-                     .put(CACHE_TYPE_ID)
+                     .put(AggregatorUtil.APPROX_HIST_CACHE_TYPE_ID)
                      .put(fieldNameBytes)
                      .putInt(resolution)
                      .putInt(numBuckets)

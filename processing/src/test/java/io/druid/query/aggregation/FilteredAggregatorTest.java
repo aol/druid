@@ -36,11 +36,13 @@ import io.druid.query.filter.RegexDimFilter;
 import io.druid.query.filter.SearchQueryDimFilter;
 import io.druid.query.filter.SelectorDimFilter;
 import io.druid.query.filter.ValueMatcher;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.query.ordering.StringComparators;
 import io.druid.query.search.search.ContainsSearchQuerySpec;
 import io.druid.segment.ColumnSelectorFactory;
 import io.druid.segment.DimensionSelector;
 import io.druid.segment.DimensionSelectorUtils;
+import io.druid.segment.DoubleColumnSelector;
 import io.druid.segment.FloatColumnSelector;
 import io.druid.segment.IdLookup;
 import io.druid.segment.LongColumnSelector;
@@ -86,7 +88,8 @@ public class FilteredAggregatorTest
     assertValues(agg, selector, expectedFirst, expectedSecond, expectedThird);
   }
 
-  private ColumnSelectorFactory makeColumnSelector(final TestFloatColumnSelector selector){
+  private ColumnSelectorFactory makeColumnSelector(final TestFloatColumnSelector selector)
+  {
 
     return new ColumnSelectorFactory()
     {
@@ -167,6 +170,12 @@ public class FilteredAggregatorTest
                     }
                   };
                 }
+
+                @Override
+                public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+                {
+                  // Don't care about runtime shape in tests
+                }
               }
           );
         } else {
@@ -185,6 +194,29 @@ public class FilteredAggregatorTest
       {
         if (columnName.equals("value")) {
           return selector;
+        } else {
+          throw new UnsupportedOperationException();
+        }
+      }
+
+      @Override
+      public DoubleColumnSelector makeDoubleColumnSelector(String columnName)
+      {
+        if (columnName.equals("value")) {
+          return new DoubleColumnSelector()
+          {
+            @Override
+            public double get()
+            {
+              return (double) selector.get();
+            }
+
+            @Override
+            public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+            {
+
+            }
+          };
         } else {
           throw new UnsupportedOperationException();
         }
@@ -216,7 +248,8 @@ public class FilteredAggregatorTest
     };
   }
 
-  private void assertValues(FilteredAggregator agg,TestFloatColumnSelector selector, double... expectedVals){
+  private void assertValues(FilteredAggregator agg,TestFloatColumnSelector selector, double... expectedVals)
+  {
     Assert.assertEquals(0.0d, agg.get());
     Assert.assertEquals(0.0d, agg.get());
     Assert.assertEquals(0.0d, agg.get());

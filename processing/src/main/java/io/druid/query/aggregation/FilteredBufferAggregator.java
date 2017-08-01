@@ -20,6 +20,7 @@
 package io.druid.query.aggregation;
 
 import io.druid.query.filter.ValueMatcher;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 
 import java.nio.ByteBuffer;
 
@@ -67,8 +68,21 @@ public class FilteredBufferAggregator implements BufferAggregator
   }
 
   @Override
+  public double getDouble(ByteBuffer buf, int position)
+  {
+    return delegate.getDouble(buf, position);
+  }
+
+  @Override
   public void close()
   {
     delegate.close();
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    inspector.visit("matcher", matcher);
+    inspector.visit("delegate", delegate);
   }
 }

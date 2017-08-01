@@ -54,6 +54,7 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collection;
@@ -67,8 +68,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Builds firehoses that accept events through the {@link io.druid.segment.realtime.firehose.EventReceiver} interface. Can also register these
- * firehoses with an {@link io.druid.segment.realtime.firehose.ServiceAnnouncingChatHandlerProvider}.
+ * Builds firehoses that accept events through the {@link EventReceiver} interface. Can also register these
+ * firehoses with an {@link ServiceAnnouncingChatHandlerProvider}.
  */
 public class EventReceiverFirehoseFactory implements FirehoseFactory<MapInputRowParser>
 {
@@ -103,7 +104,7 @@ public class EventReceiverFirehoseFactory implements FirehoseFactory<MapInputRow
   }
 
   @Override
-  public Firehose connect(MapInputRowParser firehoseParser) throws IOException
+  public Firehose connect(MapInputRowParser firehoseParser, File temporaryDirectory) throws IOException
   {
     log.info("Connecting firehose: %s", serviceName);
     final EventReceiverFirehose firehose = new EventReceiverFirehose(firehoseParser);

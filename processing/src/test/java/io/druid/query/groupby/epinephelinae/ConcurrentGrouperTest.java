@@ -25,11 +25,12 @@ import io.druid.java.util.common.IAE;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.CountAggregatorFactory;
 import io.druid.query.dimension.DimensionSpec;
-import io.druid.query.groupby.epinephelinae.Grouper.KeyComparator;
+import io.druid.query.groupby.epinephelinae.Grouper.BufferComparator;
 import io.druid.query.groupby.epinephelinae.Grouper.KeySerde;
 import io.druid.query.groupby.epinephelinae.Grouper.KeySerdeFactory;
 import io.druid.segment.ColumnSelectorFactory;
 import io.druid.segment.DimensionSelector;
+import io.druid.segment.DoubleColumnSelector;
 import io.druid.segment.FloatColumnSelector;
 import io.druid.segment.LongColumnSelector;
 import io.druid.segment.ObjectColumnSelector;
@@ -107,9 +108,9 @@ public class ConcurrentGrouperTest
         }
 
         @Override
-        public KeyComparator bufferComparator()
+        public BufferComparator bufferComparator()
         {
-          return new KeyComparator()
+          return new BufferComparator()
           {
             @Override
             public int compare(ByteBuffer lhsBuffer, ByteBuffer rhsBuffer, int lhsPosition, int rhsPosition)
@@ -120,19 +121,28 @@ public class ConcurrentGrouperTest
         }
 
         @Override
+        public BufferComparator bufferComparatorWithAggregators(
+            AggregatorFactory[] aggregatorFactories,
+            int[] aggregatorOffsets
+        )
+        {
+          return null;
+        }
+
+        @Override
         public void reset() {}
       };
     }
 
     @Override
-    public Comparator<Long> objectComparator()
+    public Comparator<Grouper.Entry<Long>> objectComparator(boolean forceDefaultOrder)
     {
-      return new Comparator<Long>()
+      return new Comparator<Grouper.Entry<Long>>()
       {
         @Override
-        public int compare(Long o1, Long o2)
+        public int compare(Grouper.Entry<Long> o1, Grouper.Entry<Long> o2)
         {
-          return o1.compareTo(o2);
+          return o1.getKey().compareTo(o2.getKey());
         }
       };
     }
@@ -169,6 +179,12 @@ public class ConcurrentGrouperTest
     {
       return null;
     }
+
+    @Override
+    public DoubleColumnSelector makeDoubleColumnSelector(String columnName)
+    {
+      return null;
+    }
   };
 
   @Test
@@ -184,7 +200,9 @@ public class ConcurrentGrouperTest
         1,
         null,
         null,
-        8
+        8,
+        null,
+        false
     );
 
     Future<?>[] futures = new Future[8];

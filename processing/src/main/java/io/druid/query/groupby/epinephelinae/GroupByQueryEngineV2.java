@@ -23,8 +23,8 @@ import com.google.common.base.Function;
 import com.google.common.base.Strings;
 import com.google.common.base.Suppliers;
 import com.google.common.collect.Maps;
+import io.druid.collections.NonBlockingPool;
 import io.druid.collections.ResourceHolder;
-import io.druid.collections.StupidPool;
 import io.druid.data.input.MapBasedRow;
 import io.druid.data.input.Row;
 import io.druid.java.util.common.IAE;
@@ -36,9 +36,11 @@ import io.druid.java.util.common.guava.Sequences;
 import io.druid.query.ColumnSelectorPlus;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.dimension.ColumnSelectorStrategyFactory;
+import io.druid.query.dimension.DimensionSpec;
 import io.druid.query.groupby.GroupByQuery;
 import io.druid.query.groupby.GroupByQueryConfig;
 import io.druid.query.groupby.epinephelinae.column.DictionaryBuildingStringGroupByColumnSelectorStrategy;
+import io.druid.query.groupby.epinephelinae.column.DoubleGroupByColumnSelectorStrategy;
 import io.druid.query.groupby.epinephelinae.column.FloatGroupByColumnSelectorStrategy;
 import io.druid.query.groupby.epinephelinae.column.GroupByColumnSelectorPlus;
 import io.druid.query.groupby.epinephelinae.column.GroupByColumnSelectorStrategy;
@@ -87,7 +89,7 @@ public class GroupByQueryEngineV2
   public static Sequence<Row> process(
       final GroupByQuery query,
       final StorageAdapter storageAdapter,
-      final StupidPool<ByteBuffer> intermediateResultsBufferPool,
+      final NonBlockingPool<ByteBuffer> intermediateResultsBufferPool,
       final GroupByQueryConfig config
   )
   {
@@ -107,7 +109,8 @@ public class GroupByQueryEngineV2
         intervals.get(0),
         query.getVirtualColumns(),
         query.getGranularity(),
-        false
+        false,
+        null
     );
 
 
@@ -193,6 +196,8 @@ public class GroupByQueryEngineV2
           return new LongGroupByColumnSelectorStrategy();
         case FLOAT:
           return new FloatGroupByColumnSelectorStrategy();
+        case DOUBLE:
+          return new DoubleGroupByColumnSelectorStrategy();
         default:
           throw new IAE("Cannot create query type helper from invalid type [%s]", type);
       }
@@ -299,7 +304,7 @@ outer:
           // Aggregate additional grouping for this row
           if (doAggregate) {
             keyBuffer.rewind();
-            if (!grouper.aggregate(keyBuffer)) {
+            if (!grouper.aggregate(keyBuffer).isOk()) {
               // Buffer full while aggregating; break out and resume later
               currentRowWasPartiallyAggregated = true;
               break outer;
@@ -359,6 +364,8 @@ outer:
                 );
               }
 
+              convertRowTypesToOutputTypes(query.getDimensions(), theMap);
+
               // Add aggregations.
               for (int i = 0; i < entry.getValues().length; i++) {
                 theMap.put(query.getAggregatorSpecs().get(i).getName(), entry.getValues()[i]);
@@ -398,6 +405,38 @@ outer:
       if (delegate != null) {
         delegate.close();
       }
+    }
+  }
+
+  private static void convertRowTypesToOutputTypes(List<DimensionSpec> dimensionSpecs, Map<String, Object> rowMap)
+  {
+    for (DimensionSpec dimSpec : dimensionSpecs) {
+      final ValueType outputType = dimSpec.getOutputType();
+      rowMap.compute(
+          dimSpec.getOutputName(),
+          (dimName, baseVal) -> {
+            switch (outputType) {
+              case STRING:
+                baseVal = baseVal == null ? "" : baseVal.toString();
+                break;
+              case LONG:
+                baseVal = DimensionHandlerUtils.convertObjectToLong(baseVal);
+                baseVal = baseVal == null ? 0L : baseVal;
+                break;
+              case FLOAT:
+                baseVal = DimensionHandlerUtils.convertObjectToFloat(baseVal);
+                baseVal = baseVal == null ? 0.f : baseVal;
+                break;
+              case DOUBLE:
+                baseVal = DimensionHandlerUtils.convertObjectToDouble(baseVal);
+                baseVal = baseVal == null ? 0.d : baseVal;
+                break;
+              default:
+                throw new IAE("Unsupported type: " + outputType);
+            }
+            return baseVal;
+          }
+      );
     }
   }
 
@@ -441,9 +480,18 @@ outer:
     }
 
     @Override
-    public Grouper.KeyComparator bufferComparator()
+    public Grouper.BufferComparator bufferComparator()
     {
       // No sorting, let mergeRunners handle that
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Grouper.BufferComparator bufferComparatorWithAggregators(
+        AggregatorFactory[] aggregatorFactories, int[] aggregatorOffsets
+    )
+    {
+      // not called on this
       throw new UnsupportedOperationException();
     }
 

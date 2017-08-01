@@ -21,7 +21,7 @@ package io.druid.query.aggregation;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.primitives.Longs;
-import io.druid.common.utils.StringUtils;
+import io.druid.java.util.common.StringUtils;
 import io.druid.data.input.impl.TimestampSpec;
 import io.druid.segment.ColumnSelectorFactory;
 import org.joda.time.DateTime;
@@ -29,14 +29,13 @@ import org.joda.time.DateTime;
 import java.nio.ByteBuffer;
 import java.sql.Timestamp;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
 public class TimestampAggregatorFactory extends AggregatorFactory
 {
-  private static final byte CACHE_TYPE_ID = 31;
-
   final String name;
   final String fieldName;
   final String timeFormat;
@@ -142,7 +141,7 @@ public class TimestampAggregatorFactory extends AggregatorFactory
   @Override
   public List<String> requiredFields()
   {
-    return Arrays.asList(fieldName);
+    return Collections.singletonList(fieldName);
   }
 
   @Override
@@ -151,7 +150,7 @@ public class TimestampAggregatorFactory extends AggregatorFactory
     byte[] fieldNameBytes = StringUtils.toUtf8(fieldName);
 
     return ByteBuffer.allocate(1 + fieldNameBytes.length)
-        .put(CACHE_TYPE_ID).put(fieldNameBytes).array();
+                     .put(AggregatorUtil.TIMESTAMP_CACHE_TYPE_ID).put(fieldNameBytes).array();
   }
 
   @Override

@@ -53,6 +53,7 @@ import io.druid.indexing.overlord.autoscaling.ScalingStats;
 import io.druid.indexing.overlord.http.security.TaskResourceFilter;
 import io.druid.indexing.overlord.setup.WorkerBehaviorConfig;
 import io.druid.java.util.common.Pair;
+import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.logger.Logger;
 import io.druid.metadata.EntryExistsException;
 import io.druid.server.http.security.ConfigResourceFilter;
@@ -163,7 +164,7 @@ public class OverlordResource
             }
             catch (EntryExistsException e) {
               return Response.status(Response.Status.BAD_REQUEST)
-                             .entity(ImmutableMap.of("error", String.format("Task[%s] already exists!", task.getId())))
+                             .entity(ImmutableMap.of("error", StringUtils.format("Task[%s] already exists!", task.getId())))
                              .build();
             }
           }
@@ -177,7 +178,22 @@ public class OverlordResource
   @Produces(MediaType.APPLICATION_JSON)
   public Response getLeader()
   {
-    return Response.ok(taskMaster.getLeader()).build();
+    return Response.ok(taskMaster.getCurrentLeader()).build();
+  }
+
+  @GET
+  @Path("/isLeader")
+  @ResourceFilters(StateResourceFilter.class)
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response isLeader()
+  {
+    final boolean leading = taskMaster.isLeader();
+    final Map<String, Boolean> response = ImmutableMap.of("leader", leading);
+    if (leading) {
+      return Response.ok(response).build();
+    } else {
+      return Response.status(Response.Status.NOT_FOUND).entity(response).build();
+    }
   }
 
   @GET
@@ -491,7 +507,7 @@ public class OverlordResource
                   if (!optionalTask.isPresent()) {
                     throw new WebApplicationException(
                         Response.serverError().entity(
-                            String.format("No task information found for task with id: [%s]", taskId)
+                            StringUtils.format("No task information found for task with id: [%s]", taskId)
                         ).build()
                     );
                   }
@@ -682,7 +698,7 @@ public class OverlordResource
             if (!optionalTask.isPresent()) {
               throw new WebApplicationException(
                   Response.serverError().entity(
-                      String.format("No task information found for task with id: [%s]", taskId)
+                      StringUtils.format("No task information found for task with id: [%s]", taskId)
                   ).build()
               );
             }

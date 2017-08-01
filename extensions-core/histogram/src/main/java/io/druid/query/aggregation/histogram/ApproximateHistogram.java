@@ -191,17 +191,35 @@ public class ApproximateHistogram
     );
   }
 
-  public long count() { return count; }
+  public long count()
+  {
+    return count;
+  }
 
-  public float min() { return min; }
+  public float min()
+  {
+    return min;
+  }
 
-  public float max() { return max; }
+  public float max()
+  {
+    return max;
+  }
 
-  public int binCount() { return binCount; }
+  public int binCount()
+  {
+    return binCount;
+  }
 
-  public int capacity() { return size; }
+  public int capacity()
+  {
+    return size;
+  }
 
-  public float[] positions() { return Arrays.copyOfRange(positions, 0, binCount); }
+  public float[] positions()
+  {
+    return Arrays.copyOfRange(positions, 0, binCount);
+  }
 
   public long[] bins()
   {
@@ -239,9 +257,15 @@ public class ApproximateHistogram
     return exactCount;
   }
 
-  public float getMin() { return this.min;}
+  public float getMin()
+  {
+    return this.min;
+  }
 
-  public float getMax() { return this.max;}
+  public float getMax()
+  {
+    return this.max;
+  }
 
   private static long sumBins(long[] bins, int binCount)
   {
@@ -335,11 +359,11 @@ public class ApproximateHistogram
     // or merge existing bins before inserting the new one
 
     int minPos = minDeltaIndex();
-    float minDelta = minPos >= 0 ? positions[minPos + 1] - positions[minPos] : Float.MAX_VALUE;
+    float minDelta = minPos >= 0 ? positions[minPos + 1] - positions[minPos] : Float.POSITIVE_INFINITY;
 
     // determine the distance of new value to the nearest bins
-    final float deltaRight = insertAt < binCount ? positions[insertAt] - value : Float.MAX_VALUE;
-    final float deltaLeft = insertAt > 0 ? value - positions[insertAt - 1] : Float.MAX_VALUE;
+    final float deltaRight = insertAt < binCount ? positions[insertAt] - value : Float.POSITIVE_INFINITY;
+    final float deltaLeft = insertAt > 0 ? value - positions[insertAt - 1] : Float.POSITIVE_INFINITY;
 
     boolean mergeValue = false;
     if (deltaRight < minDelta) {
@@ -368,7 +392,7 @@ public class ApproximateHistogram
   protected int minDeltaIndex()
   {
     // determine minimum distance between existing bins
-    float minDelta = Float.MAX_VALUE;
+    float minDelta = Float.POSITIVE_INFINITY;
     int minPos = -1;
     for (int i = 0; i < binCount - 1; ++i) {
       float delta = (positions[i + 1] - positions[i]);
@@ -548,19 +572,19 @@ public class ApproximateHistogram
     } else {
       Preconditions.checkArgument(
           mergedPositions.length >= maxSize,
-          "temp buffer [mergedPositions] too small: length must be at least [%d], got [%d]",
+          "temp buffer [mergedPositions] too small: length must be at least [%s], got [%s]",
           maxSize,
           mergedPositions.length
       );
       Preconditions.checkArgument(
           mergedBins.length >= maxSize,
-          "temp buffer [mergedBins] too small: length must be at least [%d], got [%d]",
+          "temp buffer [mergedBins] too small: length must be at least [%s], got [%s]",
           maxSize,
           mergedPositions.length
       );
       Preconditions.checkArgument(
           deltas.length >= maxSize,
-          "temp buffer [deltas] too small: length must be at least [%d], got [%d]",
+          "temp buffer [deltas] too small: length must be at least [%s], got [%s]",
           maxSize,
           mergedPositions.length
       );
@@ -886,9 +910,6 @@ public class ApproximateHistogram
       while (i < numMerge) {
         // find the smallest delta within the range used for bins
 
-        // pick minimum delta by scanning array
-        //int currentIndex = minIndex(deltas, lastValidIndex);
-
         // pick minimum delta index using min-heap
         int currentIndex = heap[0];
 
@@ -908,17 +929,13 @@ public class ApproximateHistogram
         final float mm0 = (m0 - m1) * w + m1;
 
         mergedPositions[currentIndex] = mm0;
-        //mergedPositions[nextIndex] = Float.MAX_VALUE; // for debugging
 
         mergedBins[currentIndex] = sum | APPROX_FLAG_BIT;
-        //mergedBins[nextIndex] = -1; // for debugging
 
         // update deltas and min-heap
         if (nextIndex == lastValidIndex) {
           // merged bin is the last => remove the current bin delta from the heap
           heapSize = heapDelete(heap, reverseIndex, heapSize, reverseIndex[currentIndex], deltas);
-
-          //deltas[currentIndex] = Float.MAX_VALUE; // for debugging
         } else {
           // merged bin is not the last => remove the merged bin delta from the heap
           heapSize = heapDelete(heap, reverseIndex, heapSize, reverseIndex[nextIndex], deltas);
@@ -937,9 +954,6 @@ public class ApproximateHistogram
           // updated previous bin delta is necessarily larger than its existing value => push down the heap
           siftDown(heap, reverseIndex, reverseIndex[prevIndex], heapSize - 1, deltas);
         }
-
-        // mark the merged bin as invalid
-        // deltas[nextIndex] = Float.MAX_VALUE; // for debugging
 
         // update last valid index if we merged the last bin
         if (nextIndex == lastValidIndex) {
@@ -1037,7 +1051,7 @@ public class ApproximateHistogram
   private static int minIndex(float[] deltas, int lastValidIndex)
   {
     int minIndex = -1;
-    float min = Float.MAX_VALUE;
+    float min = Float.POSITIVE_INFINITY;
     for (int k = 0; k < lastValidIndex; ++k) {
       float value = deltas[k];
       if (value < min) {
@@ -1430,16 +1444,13 @@ public class ApproximateHistogram
    */
   public static ApproximateHistogram fromBytes(ByteBuffer buf)
   {
-    ByteBuffer copy = buf.asReadOnlyBuffer();
     // negative size indicates compact representation
     // this works regardless of whether we use int or short for the size since the leftmost bit is the sign bit
-    if (copy.getShort(buf.position()) < 0) {
+    if (buf.getShort(buf.position()) < 0) {
       return fromBytesCompact(buf);
     } else {
-      // ignore size
-      copy.getInt();
-      // determine if sparse or dense based on sign of binCount
-      if (copy.getInt() < 0) {
+      // ignore size, determine if sparse or dense based on sign of binCount
+      if (buf.getInt(buf.position() + Ints.BYTES) < 0) {
         return fromBytesSparse(buf);
       } else {
         return fromBytesDense(buf);
@@ -1504,10 +1515,8 @@ public class ApproximateHistogram
     // add full bin count if left bin count is exact
     if (exact0) {
       return (s + m0);
-    }
-
-    // otherwise add only the left half of the bin
-    else {
+    } else {
+      // otherwise add only the left half of the bin
       return (s + 0.5 * m0);
     }
   }
@@ -1526,7 +1535,7 @@ public class ApproximateHistogram
   public float[] getQuantiles(float[] probabilities)
   {
     for (float p : probabilities) {
-      Preconditions.checkArgument(0 < p & p < 1, "quantile probabilities must be strictly between 0 and 1");
+      Preconditions.checkArgument(0 < p && p < 1, "quantile probabilities must be strictly between 0 and 1");
     }
 
     float[] quantiles = new float[probabilities.length];

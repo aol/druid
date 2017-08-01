@@ -23,7 +23,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Maps;
-import io.druid.jackson.DefaultObjectMapper;
 import io.druid.java.util.common.guava.Sequence;
 import io.druid.java.util.common.guava.Sequences;
 import io.druid.query.aggregation.LongSumAggregatorFactory;
@@ -32,6 +31,7 @@ import io.druid.query.timeseries.TimeseriesQuery;
 import io.druid.query.timeseries.TimeseriesQueryQueryToolChest;
 import io.druid.query.timeseries.TimeseriesResultValue;
 import io.druid.segment.SegmentMissingException;
+import io.druid.segment.TestHelper;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
 import org.junit.Assert;
@@ -43,7 +43,31 @@ import java.util.Map;
 
 public class RetryQueryRunnerTest
 {
-  private final ObjectMapper jsonMapper = new DefaultObjectMapper();
+  private static class TestRetryQueryRunnerConfig extends RetryQueryRunnerConfig
+  {
+    private int numTries;
+    private boolean returnPartialResults;
+
+    public TestRetryQueryRunnerConfig(int numTries, boolean returnPartialResults)
+    {
+      this.numTries = numTries;
+      this.returnPartialResults = returnPartialResults;
+    }
+
+    @Override
+    public int getNumTries()
+    {
+      return numTries;
+    }
+
+    @Override
+    public boolean isReturnPartialResults()
+    {
+      return returnPartialResults;
+    }
+  }
+
+  private final ObjectMapper jsonMapper = TestHelper.getJsonMapper();
 
   final TimeseriesQuery query = Druids.newTimeseriesQueryBuilder()
                                       .dataSource(QueryRunnerTestHelper.dataSource)
@@ -71,7 +95,7 @@ public class RetryQueryRunnerTest
         new QueryRunner<Result<TimeseriesResultValue>>()
         {
           @Override
-          public Sequence<Result<TimeseriesResultValue>> run(Query query, Map context)
+          public Sequence<Result<TimeseriesResultValue>> run(QueryPlus queryPlus, Map context)
           {
             ((List) context.get(Result.MISSING_SEGMENTS_KEY)).add(
                 new SegmentDescriptor(
@@ -128,7 +152,7 @@ public class RetryQueryRunnerTest
         {
           @Override
           public Sequence<Result<TimeseriesResultValue>> run(
-              Query<Result<TimeseriesResultValue>> query,
+              QueryPlus<Result<TimeseriesResultValue>> queryPlus,
               Map<String, Object> context
           )
           {
@@ -160,15 +184,7 @@ public class RetryQueryRunnerTest
         (QueryToolChest) new TimeseriesQueryQueryToolChest(
             QueryRunnerTestHelper.NoopIntervalChunkingQueryRunnerDecorator()
         ),
-        new RetryQueryRunnerConfig()
-        {
-          private int numTries = 1;
-          private boolean returnPartialResults = true;
-
-          public int getNumTries() { return numTries; }
-
-          public boolean returnPartialResults() { return returnPartialResults; }
-        },
+        new TestRetryQueryRunnerConfig(1, true),
         jsonMapper
     );
 
@@ -195,7 +211,7 @@ public class RetryQueryRunnerTest
         {
           @Override
           public Sequence<Result<TimeseriesResultValue>> run(
-              Query<Result<TimeseriesResultValue>> query,
+              QueryPlus<Result<TimeseriesResultValue>> queryPlus,
               Map<String, Object> context
           )
           {
@@ -227,15 +243,7 @@ public class RetryQueryRunnerTest
         (QueryToolChest) new TimeseriesQueryQueryToolChest(
             QueryRunnerTestHelper.NoopIntervalChunkingQueryRunnerDecorator()
         ),
-        new RetryQueryRunnerConfig()
-        {
-          private int numTries = 4;
-          private boolean returnPartialResults = true;
-
-          public int getNumTries() { return numTries; }
-
-          public boolean returnPartialResults() { return returnPartialResults; }
-        },
+        new TestRetryQueryRunnerConfig(4, true),
         jsonMapper
     );
 
@@ -261,7 +269,7 @@ public class RetryQueryRunnerTest
         {
           @Override
           public Sequence<Result<TimeseriesResultValue>> run(
-              Query<Result<TimeseriesResultValue>> query,
+              QueryPlus<Result<TimeseriesResultValue>> queryPlus,
               Map<String, Object> context
           )
           {
@@ -279,15 +287,7 @@ public class RetryQueryRunnerTest
         (QueryToolChest) new TimeseriesQueryQueryToolChest(
             QueryRunnerTestHelper.NoopIntervalChunkingQueryRunnerDecorator()
         ),
-        new RetryQueryRunnerConfig()
-        {
-          private int numTries = 1;
-          private boolean returnPartialResults = false;
-
-          public int getNumTries() { return numTries; }
-
-          public boolean returnPartialResults() { return returnPartialResults; }
-        },
+        new TestRetryQueryRunnerConfig(1, false),
         jsonMapper
     );
 
@@ -313,10 +313,11 @@ public class RetryQueryRunnerTest
         {
           @Override
           public Sequence<Result<TimeseriesResultValue>> run(
-              Query<Result<TimeseriesResultValue>> query,
+              QueryPlus<Result<TimeseriesResultValue>> queryPlus,
               Map<String, Object> context
           )
           {
+            final Query<Result<TimeseriesResultValue>> query = queryPlus.getQuery();
             if ((int) context.get("count") == 0) {
               // assume 2 missing segments at first run
               ((List) context.get(Result.MISSING_SEGMENTS_KEY)).add(
@@ -390,15 +391,7 @@ public class RetryQueryRunnerTest
         (QueryToolChest) new TimeseriesQueryQueryToolChest(
             QueryRunnerTestHelper.NoopIntervalChunkingQueryRunnerDecorator()
         ),
-        new RetryQueryRunnerConfig()
-        {
-          private int numTries = 2;
-          private boolean returnPartialResults = false;
-
-          public int getNumTries() { return numTries; }
-
-          public boolean returnPartialResults() { return returnPartialResults; }
-        },
+        new TestRetryQueryRunnerConfig(2, false),
         jsonMapper
     );
 

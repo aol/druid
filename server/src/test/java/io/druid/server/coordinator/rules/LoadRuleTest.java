@@ -28,19 +28,24 @@ import com.google.common.collect.Ordering;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
+//CHECKSTYLE.OFF: Regexp
 import com.metamx.common.logger.Logger;
+//CHECKSTYLE.ON: Regexp
 import com.metamx.emitter.EmittingLogger;
 import com.metamx.emitter.core.LoggingEmitter;
 import com.metamx.emitter.service.ServiceEmitter;
 import io.druid.client.DruidServer;
 import io.druid.jackson.DefaultObjectMapper;
+import io.druid.server.coordination.ServerType;
 import io.druid.server.coordinator.BalancerStrategy;
+import io.druid.server.coordinator.CoordinatorDynamicConfig;
 import io.druid.server.coordinator.CoordinatorStats;
 import io.druid.server.coordinator.CostBalancerStrategyFactory;
 import io.druid.server.coordinator.DruidCluster;
 import io.druid.server.coordinator.DruidCoordinatorRuntimeParams;
 import io.druid.server.coordinator.LoadPeonCallback;
 import io.druid.server.coordinator.LoadQueuePeon;
+import io.druid.server.coordinator.LoadQueuePeonTester;
 import io.druid.server.coordinator.ReplicationThrottler;
 import io.druid.server.coordinator.SegmentReplicantLookup;
 import io.druid.server.coordinator.ServerHolder;
@@ -90,23 +95,14 @@ public class LoadRuleTest
     for (String tier : Arrays.asList("hot", DruidServer.DEFAULT_TIER)) {
       throttler.updateReplicationState(tier);
     }
-    segment = new DataSegment(
-        "foo",
-        new Interval("0/3000"),
-        new DateTime().toString(),
-        Maps.<String, Object>newHashMap(),
-        Lists.<String>newArrayList(),
-        Lists.<String>newArrayList(),
-        NoneShardSpec.instance(),
-        0,
-        0
-    );
+    segment = createDataSegment("foo");
   }
 
   @After
   public void tearDown() throws Exception
   {
     EasyMock.verify(mockPeon);
+    emitter.close();
   }
 
   @Test
@@ -116,6 +112,7 @@ public class LoadRuleTest
     EasyMock.expectLastCall().atLeastOnce();
     EasyMock.expect(mockPeon.getSegmentsToLoad()).andReturn(Sets.<DataSegment>newHashSet()).atLeastOnce();
     EasyMock.expect(mockPeon.getLoadQueueSize()).andReturn(0L).atLeastOnce();
+    EasyMock.expect(mockPeon.getNumberOfSegmentsInQueue()).andReturn(0).anyTimes();
     EasyMock.replay(mockPeon);
 
     LoadRule rule = new LoadRule()
@@ -157,6 +154,7 @@ public class LoadRuleTest
     };
 
     DruidCluster druidCluster = new DruidCluster(
+        null,
         ImmutableMap.of(
             "hot",
             MinMaxPriorityQueue.orderedBy(Ordering.natural().reverse()).create(
@@ -165,8 +163,9 @@ public class LoadRuleTest
                         new DruidServer(
                             "serverHot",
                             "hostHot",
+                            null,
                             1000,
-                            "historical",
+                            ServerType.HISTORICAL,
                             "hot",
                             0
                         ).toImmutableDruidServer(),
@@ -181,8 +180,9 @@ public class LoadRuleTest
                         new DruidServer(
                             "serverNorm",
                             "hostNorm",
+                            null,
                             1000,
-                            "historical",
+                            ServerType.HISTORICAL,
                             DruidServer.DEFAULT_TIER,
                             0
                         ).toImmutableDruidServer(),
@@ -194,9 +194,9 @@ public class LoadRuleTest
     );
 
     ListeningExecutorService exec = MoreExecutors.listeningDecorator(
-            Executors.newFixedThreadPool(1));
+        Executors.newFixedThreadPool(1));
     BalancerStrategy balancerStrategy =
-            new CostBalancerStrategyFactory().createBalancerStrategy(exec);
+        new CostBalancerStrategyFactory().createBalancerStrategy(exec);
 
     CoordinatorStats stats = rule.run(
         null,
@@ -210,8 +210,8 @@ public class LoadRuleTest
         segment
     );
 
-    Assert.assertTrue(stats.getPerTierStats().get("assignedCount").get("hot").get() == 1);
-    Assert.assertTrue(stats.getPerTierStats().get("assignedCount").get(DruidServer.DEFAULT_TIER).get() == 2);
+    Assert.assertEquals(1L, stats.getTieredStat(LoadRule.ASSIGNED_COUNT, "hot"));
+    Assert.assertEquals(2L, stats.getTieredStat(LoadRule.ASSIGNED_COUNT, DruidServer.DEFAULT_TIER));
     exec.shutdown();
   }
 
@@ -222,6 +222,7 @@ public class LoadRuleTest
     EasyMock.expectLastCall().atLeastOnce();
     EasyMock.expect(mockPeon.getSegmentsToLoad()).andReturn(Sets.<DataSegment>newHashSet()).atLeastOnce();
     EasyMock.expect(mockPeon.getLoadQueueSize()).andReturn(0L).anyTimes();
+    EasyMock.expect(mockPeon.getNumberOfSegmentsInQueue()).andReturn(0).anyTimes();
     EasyMock.replay(mockPeon);
 
     LoadRule rule = new LoadRule()
@@ -265,8 +266,9 @@ public class LoadRuleTest
     DruidServer server1 = new DruidServer(
         "serverHot",
         "hostHot",
+        null,
         1000,
-        "historical",
+        ServerType.HISTORICAL,
         "hot",
         0
     );
@@ -274,13 +276,15 @@ public class LoadRuleTest
     DruidServer server2 = new DruidServer(
         "serverNorm",
         "hostNorm",
+        null,
         1000,
-        "historical",
+        ServerType.HISTORICAL,
         DruidServer.DEFAULT_TIER,
         0
     );
     server2.addDataSegment(segment.getIdentifier(), segment);
     DruidCluster druidCluster = new DruidCluster(
+        null,
         ImmutableMap.of(
             "hot",
             MinMaxPriorityQueue.orderedBy(Ordering.natural().reverse()).create(
@@ -304,9 +308,9 @@ public class LoadRuleTest
     );
 
     ListeningExecutorService exec = MoreExecutors.listeningDecorator(
-            Executors.newFixedThreadPool(1));
+        Executors.newFixedThreadPool(1));
     BalancerStrategy balancerStrategy =
-            new CostBalancerStrategyFactory().createBalancerStrategy(exec);
+        new CostBalancerStrategyFactory().createBalancerStrategy(exec);
 
     CoordinatorStats stats = rule.run(
         null,
@@ -320,8 +324,8 @@ public class LoadRuleTest
         segment
     );
 
-    Assert.assertTrue(stats.getPerTierStats().get("droppedCount").get("hot").get() == 1);
-    Assert.assertTrue(stats.getPerTierStats().get("droppedCount").get(DruidServer.DEFAULT_TIER).get() == 1);
+    Assert.assertEquals(1L, stats.getTieredStat("droppedCount", "hot"));
+    Assert.assertEquals(1L, stats.getTieredStat("droppedCount", DruidServer.DEFAULT_TIER));
     exec.shutdown();
   }
 
@@ -332,6 +336,7 @@ public class LoadRuleTest
     EasyMock.expectLastCall().atLeastOnce();
     EasyMock.expect(mockPeon.getSegmentsToLoad()).andReturn(Sets.<DataSegment>newHashSet()).atLeastOnce();
     EasyMock.expect(mockPeon.getLoadQueueSize()).andReturn(0L).atLeastOnce();
+    EasyMock.expect(mockPeon.getNumberOfSegmentsInQueue()).andReturn(0).anyTimes();
     EasyMock.replay(mockPeon);
 
     LoadRule rule = new LoadRule()
@@ -373,6 +378,7 @@ public class LoadRuleTest
     };
 
     DruidCluster druidCluster = new DruidCluster(
+        null,
         ImmutableMap.of(
             "hot",
             MinMaxPriorityQueue.orderedBy(Ordering.natural().reverse()).create(
@@ -381,8 +387,9 @@ public class LoadRuleTest
                         new DruidServer(
                             "serverHot",
                             "hostHot",
+                            null,
                             1000,
-                            "historical",
+                            ServerType.HISTORICAL,
                             "hot",
                             0
                         ).toImmutableDruidServer(),
@@ -394,9 +401,9 @@ public class LoadRuleTest
     );
 
     ListeningExecutorService exec = MoreExecutors.listeningDecorator(
-            Executors.newFixedThreadPool(1));
+        Executors.newFixedThreadPool(1));
     BalancerStrategy balancerStrategy =
-            new CostBalancerStrategyFactory().createBalancerStrategy(exec);
+        new CostBalancerStrategyFactory().createBalancerStrategy(exec);
 
     CoordinatorStats stats = rule.run(
         null,
@@ -410,7 +417,7 @@ public class LoadRuleTest
         segment
     );
 
-    Assert.assertTrue(stats.getPerTierStats().get("assignedCount").get("hot").get() == 1);
+    Assert.assertEquals(1L, stats.getTieredStat(LoadRule.ASSIGNED_COUNT, "hot"));
     exec.shutdown();
   }
 
@@ -421,6 +428,7 @@ public class LoadRuleTest
     EasyMock.expectLastCall().atLeastOnce();
     EasyMock.expect(mockPeon.getSegmentsToLoad()).andReturn(Sets.<DataSegment>newHashSet()).atLeastOnce();
     EasyMock.expect(mockPeon.getLoadQueueSize()).andReturn(0L).anyTimes();
+    EasyMock.expect(mockPeon.getNumberOfSegmentsInQueue()).andReturn(0).anyTimes();
     EasyMock.replay(mockPeon);
 
     LoadRule rule = new LoadRule()
@@ -464,16 +472,18 @@ public class LoadRuleTest
     DruidServer server1 = new DruidServer(
         "serverHot",
         "hostHot",
+        null,
         1000,
-        "historical",
+        ServerType.HISTORICAL,
         "hot",
         0
     );
     DruidServer server2 = new DruidServer(
         "serverHo2t",
         "hostHot2",
+        null,
         1000,
-        "historical",
+        ServerType.HISTORICAL,
         "hot",
         0
     );
@@ -481,6 +491,7 @@ public class LoadRuleTest
     server2.addDataSegment(segment.getIdentifier(), segment);
 
     DruidCluster druidCluster = new DruidCluster(
+        null,
         ImmutableMap.of(
             "hot",
             MinMaxPriorityQueue.orderedBy(Ordering.natural().reverse()).create(
@@ -499,9 +510,9 @@ public class LoadRuleTest
     );
 
     ListeningExecutorService exec = MoreExecutors.listeningDecorator(
-            Executors.newFixedThreadPool(1));
+        Executors.newFixedThreadPool(1));
     BalancerStrategy balancerStrategy =
-            new CostBalancerStrategyFactory().createBalancerStrategy(exec);
+        new CostBalancerStrategyFactory().createBalancerStrategy(exec);
 
     CoordinatorStats stats = rule.run(
         null,
@@ -515,7 +526,119 @@ public class LoadRuleTest
         segment
     );
 
-    Assert.assertTrue(stats.getPerTierStats().get("droppedCount").get("hot").get() == 1);
+    Assert.assertEquals(1L, stats.getTieredStat("droppedCount", "hot"));
     exec.shutdown();
+  }
+
+  @Test
+  public void testMaxLoadingQueueSize() throws Exception
+  {
+    EasyMock.replay(mockPeon);
+    LoadQueuePeonTester peon = new LoadQueuePeonTester();
+
+    LoadRule rule = new LoadRule()
+    {
+      private final Map<String, Integer> tiers = ImmutableMap.of(
+          "hot", 1
+      );
+
+      @Override
+      public Map<String, Integer> getTieredReplicants()
+      {
+        return tiers;
+      }
+
+      @Override
+      public int getNumReplicants(String tier)
+      {
+        return tiers.get(tier);
+      }
+
+      @Override
+      public String getType()
+      {
+        return "test";
+      }
+
+      @Override
+      public boolean appliesTo(DataSegment segment, DateTime referenceTimestamp)
+      {
+        return true;
+      }
+
+      @Override
+      public boolean appliesTo(Interval interval, DateTime referenceTimestamp)
+      {
+        return true;
+      }
+    };
+
+    DruidCluster druidCluster = new DruidCluster(
+        null,
+        ImmutableMap.of(
+            "hot",
+            MinMaxPriorityQueue.orderedBy(Ordering.natural().reverse()).create(
+                Arrays.asList(
+                    new ServerHolder(
+                        new DruidServer(
+                            "serverHot",
+                            "hostHot",
+                            null,
+                            1000,
+                            ServerType.HISTORICAL,
+                            "hot",
+                            0
+                        ).toImmutableDruidServer(),
+                        peon
+                    )
+                )
+            )
+        )
+    );
+
+    ListeningExecutorService exec = MoreExecutors.listeningDecorator(
+        Executors.newFixedThreadPool(1));
+    BalancerStrategy balancerStrategy =
+        new CostBalancerStrategyFactory().createBalancerStrategy(exec);
+
+    DataSegment dataSegment1 = createDataSegment("ds1");
+    DataSegment dataSegment2 = createDataSegment("ds2");
+    DataSegment dataSegment3 = createDataSegment("ds3");
+
+    DruidCoordinatorRuntimeParams params =
+        DruidCoordinatorRuntimeParams
+            .newBuilder()
+            .withDruidCluster(druidCluster)
+            .withSegmentReplicantLookup(SegmentReplicantLookup.make(druidCluster))
+            .withReplicationManager(throttler)
+            .withBalancerStrategy(balancerStrategy)
+            .withBalancerReferenceTimestamp(new DateTime("2013-01-01"))
+            .withAvailableSegments(Arrays.asList(dataSegment1, dataSegment2, dataSegment3))
+            .withDynamicConfigs(new CoordinatorDynamicConfig.Builder().withMaxSegmentsInNodeLoadingQueue(2).build())
+            .build();
+
+    CoordinatorStats stats1 = rule.run(null, params, dataSegment1);
+    CoordinatorStats stats2 = rule.run(null, params, dataSegment2);
+    CoordinatorStats stats3 = rule.run(null, params, dataSegment3);
+
+    Assert.assertEquals(1L, stats1.getTieredStat(LoadRule.ASSIGNED_COUNT, "hot"));
+    Assert.assertEquals(1L, stats2.getTieredStat(LoadRule.ASSIGNED_COUNT, "hot"));
+    Assert.assertEquals(0L, stats3.getTieredStat(LoadRule.ASSIGNED_COUNT, "hot"));
+    exec.shutdown();
+  }
+
+  private DataSegment createDataSegment(String dataSource)
+  {
+    return new DataSegment(
+        dataSource,
+        new Interval("0/3000"),
+        new DateTime().toString(),
+        Maps.newHashMap(),
+        Lists.newArrayList(),
+        Lists.newArrayList(),
+        NoneShardSpec.instance(),
+        0,
+        0
+    );
   }
 }

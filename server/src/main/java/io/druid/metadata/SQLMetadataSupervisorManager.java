@@ -33,6 +33,7 @@ import io.druid.guice.annotations.Json;
 import io.druid.indexing.overlord.supervisor.SupervisorSpec;
 import io.druid.indexing.overlord.supervisor.VersionedSupervisorSpec;
 import io.druid.java.util.common.Pair;
+import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.lifecycle.LifecycleStart;
 
 import org.joda.time.DateTime;
@@ -71,6 +72,7 @@ public class SQLMetadataSupervisorManager implements MetadataSupervisorManager
     this.dbi = connector.getDBI();
   }
 
+  @Override
   @LifecycleStart
   public void start()
   {
@@ -87,7 +89,7 @@ public class SQLMetadataSupervisorManager implements MetadataSupervisorManager
           public Void withHandle(Handle handle) throws Exception
           {
             handle.createStatement(
-                String.format(
+                StringUtils.format(
                     "INSERT INTO %s (spec_id, created_date, payload) VALUES (:spec_id, :created_date, :payload)",
                     getSupervisorsTable()
                 )
@@ -114,7 +116,7 @@ public class SQLMetadataSupervisorManager implements MetadataSupervisorManager
               public Map<String, List<VersionedSupervisorSpec>> withHandle(Handle handle) throws Exception
               {
                 return handle.createQuery(
-                    String.format(
+                    StringUtils.format(
                         "SELECT id, spec_id, created_date, payload FROM %1$s ORDER BY id DESC",
                         getSupervisorsTable()
                     )
@@ -186,7 +188,7 @@ public class SQLMetadataSupervisorManager implements MetadataSupervisorManager
               public Map<String, SupervisorSpec> withHandle(Handle handle) throws Exception
               {
                 return handle.createQuery(
-                    String.format(
+                    StringUtils.format(
                         "SELECT r.spec_id, r.payload "
                         + "FROM %1$s r "
                         + "INNER JOIN(SELECT spec_id, max(id) as id FROM %1$s GROUP BY spec_id) latest "

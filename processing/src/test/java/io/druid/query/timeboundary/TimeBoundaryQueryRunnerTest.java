@@ -38,7 +38,6 @@ import io.druid.segment.Segment;
 import io.druid.segment.TestIndex;
 import io.druid.segment.incremental.IncrementalIndex;
 import io.druid.segment.incremental.IncrementalIndexSchema;
-import io.druid.segment.incremental.OnheapIncrementalIndex;
 import io.druid.timeline.DataSegment;
 import io.druid.timeline.TimelineObjectHolder;
 import io.druid.timeline.VersionedIntervalTimeline;
@@ -119,7 +118,10 @@ public class TimeBoundaryQueryRunnerTest
         .withQueryGranularity(Granularities.HOUR)
         .withMetrics(TestIndex.METRIC_AGGS)
         .build();
-    return new OnheapIncrementalIndex(schema, true, maxRowCount);
+    return new IncrementalIndex.Builder()
+        .setIndexSchema(schema)
+        .setMaxRowCount(maxRowCount)
+        .buildOnheap();
   }
 
   private static String makeIdentifier(IncrementalIndex index, String version)
@@ -138,7 +140,8 @@ public class TimeBoundaryQueryRunnerTest
     );
   }
 
-  private QueryRunner getCustomRunner() throws IOException {
+  private QueryRunner getCustomRunner() throws IOException
+  {
     CharSource v_0112 = CharSource.wrap(StringUtils.join(V_0112, "\n"));
     CharSource v_0113 = CharSource.wrap(StringUtils.join(V_0113, "\n"));
 

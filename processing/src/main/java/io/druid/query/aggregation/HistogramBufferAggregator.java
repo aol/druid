@@ -21,6 +21,7 @@ package io.druid.query.aggregation;
 
 import com.google.common.primitives.Floats;
 import com.google.common.primitives.Longs;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.FloatColumnSelector;
 
 import java.nio.ByteBuffer;
@@ -49,8 +50,8 @@ public class HistogramBufferAggregator implements BufferAggregator
 
     final long[] bins = new long[breaks.length + 1];
     mutationBuffer.asLongBuffer().put(bins);
-    mutationBuffer.putFloat(position + minOffset, Float.MAX_VALUE);
-    mutationBuffer.putFloat(position + maxOffset, Float.MIN_VALUE);
+    mutationBuffer.putFloat(position + minOffset, Float.POSITIVE_INFINITY);
+    mutationBuffer.putFloat(position + maxOffset, Float.NEGATIVE_INFINITY);
   }
 
   @Override
@@ -101,8 +102,20 @@ public class HistogramBufferAggregator implements BufferAggregator
   }
 
   @Override
+  public double getDouble(ByteBuffer buf, int position)
+  {
+    throw new UnsupportedOperationException("HistogramBufferAggregator does not support getDouble");
+  }
+
+  @Override
   public void close()
   {
     // no resources to cleanup
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    inspector.visit("selector", selector);
   }
 }

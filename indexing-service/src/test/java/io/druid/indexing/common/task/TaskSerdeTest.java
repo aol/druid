@@ -88,7 +88,6 @@ public class TaskSerdeTest
     );
 
     Assert.assertEquals(false, ioConfig.isAppendToExisting());
-    Assert.assertEquals(false, ioConfig.isSkipFirehoseCaching());
   }
 
   @Test
@@ -99,7 +98,6 @@ public class TaskSerdeTest
         IndexTask.IndexTuningConfig.class
     );
 
-    Assert.assertEquals(true, tuningConfig.isBuildV9Directly());
     Assert.assertEquals(false, tuningConfig.isForceExtendableShardSpecs());
     Assert.assertEquals(false, tuningConfig.isReportParseExceptions());
     Assert.assertEquals(new IndexSpec(), tuningConfig.getIndexSpec());
@@ -186,11 +184,10 @@ public class TaskSerdeTest
                 ),
                 jsonMapper
             ),
-            new IndexTask.IndexIOConfig(new LocalFirehoseFactory(new File("lol"), "rofl", null), true, true),
-            new IndexTask.IndexTuningConfig(10000, 10, 9999, null, indexSpec, 3, true, true, true)
+            new IndexTask.IndexIOConfig(new LocalFirehoseFactory(new File("lol"), "rofl", null), true),
+            new IndexTask.IndexTuningConfig(10000, 10, null, 9999, null, indexSpec, 3, true, true, false, null, null)
         ),
-        null,
-        jsonMapper
+        null
     );
 
     final String json = jsonMapper.writeValueAsString(task);
@@ -210,7 +207,6 @@ public class TaskSerdeTest
     Assert.assertTrue(taskIoConfig.getFirehoseFactory() instanceof LocalFirehoseFactory);
     Assert.assertTrue(task2IoConfig.getFirehoseFactory() instanceof LocalFirehoseFactory);
     Assert.assertEquals(taskIoConfig.isAppendToExisting(), task2IoConfig.isAppendToExisting());
-    Assert.assertEquals(taskIoConfig.isSkipFirehoseCaching(), task2IoConfig.isSkipFirehoseCaching());
 
     IndexTask.IndexTuningConfig taskTuningConfig = task.getIngestionSchema().getTuningConfig();
     IndexTask.IndexTuningConfig task2TuningConfig = task2.getIngestionSchema().getTuningConfig();
@@ -225,7 +221,6 @@ public class TaskSerdeTest
     Assert.assertEquals(taskTuningConfig.getMaxRowsInMemory(), task2TuningConfig.getMaxRowsInMemory());
     Assert.assertEquals(taskTuningConfig.getNumShards(), task2TuningConfig.getNumShards());
     Assert.assertEquals(taskTuningConfig.getTargetPartitionSize(), task2TuningConfig.getTargetPartitionSize());
-    Assert.assertEquals(taskTuningConfig.isBuildV9Directly(), task2TuningConfig.isBuildV9Directly());
     Assert.assertEquals(
         taskTuningConfig.isForceExtendableShardSpecs(),
         task2TuningConfig.isForceExtendableShardSpecs()
@@ -251,11 +246,10 @@ public class TaskSerdeTest
                 ),
                 jsonMapper
             ),
-            new IndexTask.IndexIOConfig(new LocalFirehoseFactory(new File("lol"), "rofl", null), true, null),
-            new IndexTask.IndexTuningConfig(10000, 10, null, null, indexSpec, 3, true, true, true)
+            new IndexTask.IndexIOConfig(new LocalFirehoseFactory(new File("lol"), "rofl", null), true),
+            new IndexTask.IndexTuningConfig(10000, 10, null, null, null, indexSpec, 3, true, true, false, null, null)
         ),
-        null,
-        jsonMapper
+        null
     );
 
     for (final Module jacksonModule : new FirehoseModule().getJacksonModules()) {
@@ -334,6 +328,41 @@ public class TaskSerdeTest
     Assert.assertEquals(new Interval("2010-01-01/P1D"), task3.getInterval());
     Assert.assertEquals(segments, task3.getSegments());
     Assert.assertEquals(aggregators, task3.getAggregators());
+  }
+
+  @Test
+  public void testSameIntervalMergeTaskSerde() throws Exception
+  {
+    final List<AggregatorFactory> aggregators = ImmutableList.<AggregatorFactory>of(new CountAggregatorFactory("cnt"));
+    final SameIntervalMergeTask task = new SameIntervalMergeTask(
+        null,
+        "foo",
+        new Interval("2010-01-01/P1D"),
+        aggregators,
+        true,
+        indexSpec,
+        true,
+        null
+    );
+
+    final String json = jsonMapper.writeValueAsString(task);
+
+    Thread.sleep(100); // Just want to run the clock a bit to make sure the task id doesn't change
+    final SameIntervalMergeTask task2 = (SameIntervalMergeTask) jsonMapper.readValue(json, Task.class);
+
+    Assert.assertEquals("foo", task.getDataSource());
+    Assert.assertEquals(new Interval("2010-01-01/P1D"), task.getInterval());
+
+    Assert.assertEquals(task.getId(), task2.getId());
+    Assert.assertEquals(task.getGroupId(), task2.getGroupId());
+    Assert.assertEquals(task.getDataSource(), task2.getDataSource());
+    Assert.assertEquals(task.getInterval(), task2.getInterval());
+    Assert.assertEquals(task.getRollup(), task2.getRollup());
+    Assert.assertEquals(task.getIndexSpec(), task2.getIndexSpec());
+    Assert.assertEquals(
+        task.getAggregators().get(0).getName(),
+        task2.getAggregators().get(0).getName()
+    );
   }
 
   @Test
@@ -467,6 +496,7 @@ public class TaskSerdeTest
                 0,
                 0,
                 true,
+                null,
                 null
             )
         ),

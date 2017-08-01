@@ -60,7 +60,6 @@ import io.druid.segment.QueryableIndexSegment;
 import io.druid.segment.Segment;
 import io.druid.segment.TestHelper;
 import io.druid.segment.incremental.IncrementalIndex;
-import io.druid.segment.incremental.OnheapIncrementalIndex;
 import org.apache.commons.io.FileUtils;
 import org.joda.time.DateTime;
 import org.junit.AfterClass;
@@ -113,24 +112,19 @@ public class MultiValuedDimensionTest
   @BeforeClass
   public static void setupClass() throws Exception
   {
-    incrementalIndex = new OnheapIncrementalIndex(
-        0,
-        Granularities.NONE,
-        new AggregatorFactory[]{
-            new CountAggregatorFactory("count")
-        },
-        true,
-        true,
-        true,
-        5000
-    );
+    incrementalIndex = new IncrementalIndex.Builder()
+        .setSimpleTestingIndexSchema(new CountAggregatorFactory("count"))
+        .setMaxRowCount(5000)
+        .buildOnheap();
 
     StringInputRowParser parser = new StringInputRowParser(
         new CSVParseSpec(
             new TimestampSpec("timestamp", "iso", null),
             new DimensionsSpec(DimensionsSpec.getDefaultSchemas(ImmutableList.of("product", "tags")), null, null),
             "\t",
-            ImmutableList.of("timestamp", "product", "tags")
+            ImmutableList.of("timestamp", "product", "tags"),
+            false,
+            0
         ),
         "UTF-8"
     );
@@ -147,7 +141,7 @@ public class MultiValuedDimensionTest
     }
 
     persistedSegmentDir = Files.createTempDir();
-    TestHelper.getTestIndexMerger()
+    TestHelper.getTestIndexMergerV9()
               .persist(incrementalIndex, persistedSegmentDir, new IndexSpec());
 
     queryableIndex = TestHelper.getTestIndexIO().loadIndex(persistedSegmentDir);

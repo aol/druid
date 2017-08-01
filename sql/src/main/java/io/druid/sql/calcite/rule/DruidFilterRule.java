@@ -28,16 +28,9 @@ import org.apache.calcite.rel.core.Filter;
 
 public class DruidFilterRule extends RelOptRule
 {
-  private static final DruidFilterRule INSTANCE = new DruidFilterRule();
-
-  private DruidFilterRule()
+  public DruidFilterRule()
   {
     super(operand(Filter.class, operand(DruidRel.class, none())));
-  }
-
-  public static DruidFilterRule instance()
-  {
-    return INSTANCE;
   }
 
   @Override
@@ -59,7 +52,10 @@ public class DruidFilterRule extends RelOptRule
     );
     if (dimFilter != null) {
       call.transformTo(
-          druidRel.withQueryBuilder(druidRel.getQueryBuilder().withFilter(dimFilter))
+          druidRel.withQueryBuilder(
+              druidRel.getQueryBuilder()
+                      .withFilter(dimFilter)
+          )
       );
     }
   }

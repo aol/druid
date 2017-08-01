@@ -22,6 +22,7 @@ package io.druid.segment;
 import com.google.common.base.Predicate;
 import io.druid.query.extraction.ExtractionFn;
 import io.druid.query.filter.ValueMatcher;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.data.IndexedInts;
 import io.druid.segment.data.SingleIndexedInt;
 
@@ -30,7 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public class SingleScanTimeDimSelector implements DimensionSelector
+public class SingleScanTimeDimSelector implements SingleValueDimensionSelector
 {
   private final ExtractionFn extractionFn;
   private final LongColumnSelector selector;
@@ -64,6 +65,12 @@ public class SingleScanTimeDimSelector implements DimensionSelector
   }
 
   @Override
+  public int getRowValue()
+  {
+    return getDimensionValueIndex();
+  }
+
+  @Override
   public ValueMatcher makeValueMatcher(final String value)
   {
     return new ValueMatcher()
@@ -72,6 +79,12 @@ public class SingleScanTimeDimSelector implements DimensionSelector
       public boolean matches()
       {
         return Objects.equals(lookupName(getDimensionValueIndex()), value);
+      }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        inspector.visit("selector", SingleScanTimeDimSelector.this);
       }
     };
   }
@@ -86,6 +99,13 @@ public class SingleScanTimeDimSelector implements DimensionSelector
       {
         return predicate.apply(lookupName(getDimensionValueIndex()));
       }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        inspector.visit("selector", SingleScanTimeDimSelector.this);
+        inspector.visit("predicate", predicate);
+      }
     };
   }
 
@@ -98,15 +118,14 @@ public class SingleScanTimeDimSelector implements DimensionSelector
       currentValue = extractionFn.apply(timestamp);
       ++index;
       timeValues.add(currentValue);
-    }
-    // if this is a new timestamp, apply and cache extraction function result
-    // since timestamps are assumed grouped and scanned once, we only need to
-    // check if the current timestamp is different than the current timestamp.
-    //
-    // If this new timestamp is mapped to the same value by the extraction function,
-    // we can also avoid creating a dimension value and corresponding index
-    // and use the current one
-    else if (timestamp != currentTimestamp) {
+      // if this is a new timestamp, apply and cache extraction function result
+      // since timestamps are assumed grouped and scanned once, we only need to
+      // check if the current timestamp is different than the current timestamp.
+      //
+      // If this new timestamp is mapped to the same value by the extraction function,
+      // we can also avoid creating a dimension value and corresponding index
+      // and use the current one
+    } else if (timestamp != currentTimestamp) {
       if (descending ? timestamp > currentTimestamp : timestamp < currentTimestamp) {
         // re-using this selector for multiple scans would cause the same rows to return different IDs
         // we might want to re-visit if we ever need to do multiple scans with this dimension selector
@@ -155,5 +174,13 @@ public class SingleScanTimeDimSelector implements DimensionSelector
   public IdLookup idLookup()
   {
     return null;
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    inspector.visit("selector", selector);
+    inspector.visit("extractionFn", extractionFn);
+    inspector.visit("descending", descending);
   }
 }

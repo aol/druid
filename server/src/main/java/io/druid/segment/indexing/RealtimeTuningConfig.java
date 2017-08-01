@@ -47,9 +47,9 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
   private static final int defaultMaxPendingPersists = 0;
   private static final ShardSpec defaultShardSpec = NoneShardSpec.instance();
   private static final IndexSpec defaultIndexSpec = new IndexSpec();
-  private static final Boolean defaultBuildV9Directly = Boolean.TRUE;
   private static final Boolean defaultReportParseExceptions = Boolean.FALSE;
   private static final long defaultHandoffConditionTimeout = 0;
+  private static final long defaultAlertTimeout = 0;
 
   private static File createNewBasePersistDirectory()
   {
@@ -69,11 +69,12 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
         defaultMaxPendingPersists,
         defaultShardSpec,
         defaultIndexSpec,
-        defaultBuildV9Directly,
+        true,
         0,
         0,
         defaultReportParseExceptions,
-        defaultHandoffConditionTimeout
+        defaultHandoffConditionTimeout,
+        defaultAlertTimeout
     );
   }
 
@@ -86,11 +87,11 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
   private final int maxPendingPersists;
   private final ShardSpec shardSpec;
   private final IndexSpec indexSpec;
-  private final boolean buildV9Directly;
   private final int persistThreadPriority;
   private final int mergeThreadPriority;
   private final boolean reportParseExceptions;
   private final long handoffConditionTimeout;
+  private final long alertTimeout;
 
   @JsonCreator
   public RealtimeTuningConfig(
@@ -103,11 +104,13 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
       @JsonProperty("maxPendingPersists") Integer maxPendingPersists,
       @JsonProperty("shardSpec") ShardSpec shardSpec,
       @JsonProperty("indexSpec") IndexSpec indexSpec,
+      // This parameter is left for compatibility when reading existing configs, to be removed in Druid 0.12.
       @JsonProperty("buildV9Directly") Boolean buildV9Directly,
       @JsonProperty("persistThreadPriority") int persistThreadPriority,
       @JsonProperty("mergeThreadPriority") int mergeThreadPriority,
       @JsonProperty("reportParseExceptions") Boolean reportParseExceptions,
-      @JsonProperty("handoffConditionTimeout") Long handoffConditionTimeout
+      @JsonProperty("handoffConditionTimeout") Long handoffConditionTimeout,
+      @JsonProperty("alertTimeout") Long alertTimeout
   )
   {
     this.maxRowsInMemory = maxRowsInMemory == null ? defaultMaxRowsInMemory : maxRowsInMemory;
@@ -123,25 +126,28 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
     this.maxPendingPersists = maxPendingPersists == null ? defaultMaxPendingPersists : maxPendingPersists;
     this.shardSpec = shardSpec == null ? defaultShardSpec : shardSpec;
     this.indexSpec = indexSpec == null ? defaultIndexSpec : indexSpec;
-    this.buildV9Directly = buildV9Directly == null ? defaultBuildV9Directly : buildV9Directly;
     this.mergeThreadPriority = mergeThreadPriority;
     this.persistThreadPriority = persistThreadPriority;
     this.reportParseExceptions = reportParseExceptions == null
                                  ? defaultReportParseExceptions
                                  : reportParseExceptions;
-
     this.handoffConditionTimeout = handoffConditionTimeout == null
                                    ? defaultHandoffConditionTimeout
                                    : handoffConditionTimeout;
     Preconditions.checkArgument(this.handoffConditionTimeout >= 0, "handoffConditionTimeout must be >= 0");
+
+    this.alertTimeout = alertTimeout == null ? defaultAlertTimeout : alertTimeout;
+    Preconditions.checkArgument(this.alertTimeout >= 0, "alertTimeout must be >= 0");
   }
 
+  @Override
   @JsonProperty
   public int getMaxRowsInMemory()
   {
     return maxRowsInMemory;
   }
 
+  @Override
   @JsonProperty
   public Period getIntermediatePersistPeriod()
   {
@@ -154,6 +160,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
     return windowPeriod;
   }
 
+  @Override
   @JsonProperty
   public File getBasePersistDirectory()
   {
@@ -172,6 +179,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
     return rejectionPolicyFactory;
   }
 
+  @Override
   @JsonProperty
   public int getMaxPendingPersists()
   {
@@ -184,16 +192,21 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
     return shardSpec;
   }
 
+  @Override
   @JsonProperty
   public IndexSpec getIndexSpec()
   {
     return indexSpec;
   }
 
+  /**
+   * Always returns true, doesn't affect the version being built.
+   */
+  @Deprecated
   @JsonProperty
   public Boolean getBuildV9Directly()
   {
-    return buildV9Directly;
+    return true;
   }
 
   @JsonProperty
@@ -208,6 +221,7 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
     return this.mergeThreadPriority;
   }
 
+  @Override
   @JsonProperty
   public boolean isReportParseExceptions()
   {
@@ -218,6 +232,12 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
   public long getHandoffConditionTimeout()
   {
     return handoffConditionTimeout;
+  }
+
+  @JsonProperty
+  public long getAlertTimeout()
+  {
+    return alertTimeout;
   }
 
   public RealtimeTuningConfig withVersioningPolicy(VersioningPolicy policy)
@@ -232,11 +252,12 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
         maxPendingPersists,
         shardSpec,
         indexSpec,
-        buildV9Directly,
+        true,
         persistThreadPriority,
         mergeThreadPriority,
         reportParseExceptions,
-        handoffConditionTimeout
+        handoffConditionTimeout,
+        alertTimeout
     );
   }
 
@@ -252,11 +273,12 @@ public class RealtimeTuningConfig implements TuningConfig, AppenderatorConfig
         maxPendingPersists,
         shardSpec,
         indexSpec,
-        buildV9Directly,
+        true,
         persistThreadPriority,
         mergeThreadPriority,
         reportParseExceptions,
-        handoffConditionTimeout
+        handoffConditionTimeout,
+        alertTimeout
     );
   }
 }

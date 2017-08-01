@@ -35,6 +35,7 @@ import io.druid.data.input.impl.StringInputRowParser;
 import io.druid.data.input.impl.TimestampSpec;
 import io.druid.indexer.hadoop.WindowedDataSegment;
 import io.druid.jackson.DefaultObjectMapper;
+import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.granularity.Granularities;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.LongSumAggregatorFactory;
@@ -280,7 +281,7 @@ public class BatchDeltaIngestionTest
     JobHelper.runJobs(ImmutableList.<Jobby>of(job), config);
 
     File segmentFolder = new File(
-        String.format(
+        StringUtils.format(
             "%s/%s/%s_%s/%s/0",
             config.getSchema().getIOConfig().getSegmentOutputPath(),
             config.getSchema().getDataSchema().getDataSource(),
@@ -322,8 +323,7 @@ public class BatchDeltaIngestionTest
         ImmutableList.of(new WindowedStorageAdapter(adapter, windowedDataSegment.getInterval())),
         ImmutableList.of("host"),
         ImmutableList.of("visited_sum", "unique_hosts"),
-        null,
-        Granularities.NONE
+        null
     );
 
     List<InputRow> rows = Lists.newArrayList();
@@ -347,7 +347,9 @@ public class BatchDeltaIngestionTest
                             new TimestampSpec("timestamp", "yyyyMMddHH", null),
                             new DimensionsSpec(DimensionsSpec.getDefaultSchemas(ImmutableList.of("host")), null, null),
                             null,
-                            ImmutableList.of("timestamp", "host", "host2", "visited_num")
+                            ImmutableList.of("timestamp", "host", "host2", "visited_num"),
+                            false,
+                            0
                         ),
                         null
                     ),
@@ -385,7 +387,8 @@ public class BatchDeltaIngestionTest
                 null,
                 null,
                 false,
-                false
+                false,
+                null
             )
         )
     );

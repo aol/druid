@@ -85,7 +85,7 @@ public class VarianceSerde extends ComplexMetricSerde
       ByteBuffer byteBuffer, ColumnBuilder columnBuilder
   )
   {
-    final GenericIndexed column = GenericIndexed.read(byteBuffer, getObjectStrategy());
+    final GenericIndexed column = GenericIndexed.read(byteBuffer, getObjectStrategy(), columnBuilder.getFileMapper());
     columnBuilder.setComplexColumn(new ComplexColumnPartSupplier(getTypeName(), column));
   }
 
@@ -103,9 +103,8 @@ public class VarianceSerde extends ComplexMetricSerde
       @Override
       public VarianceAggregatorCollector fromByteBuffer(ByteBuffer buffer, int numBytes)
       {
-        final ByteBuffer readOnlyBuffer = buffer.asReadOnlyBuffer();
-        readOnlyBuffer.limit(readOnlyBuffer.position() + numBytes);
-        return VarianceAggregatorCollector.from(readOnlyBuffer);
+        buffer.limit(buffer.position() + numBytes);
+        return VarianceAggregatorCollector.from(buffer);
       }
 
       @Override

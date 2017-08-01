@@ -21,6 +21,7 @@ package io.druid.query.groupby.epinephelinae;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.druid.query.aggregation.AggregatorFactory;
 
 import java.io.Closeable;
 import java.nio.ByteBuffer;
@@ -60,9 +61,9 @@ public interface Grouper<KeyType> extends Closeable
    * @param key     key object
    * @param keyHash result of {@link Groupers#hash(Object)} on the key
    *
-   * @return true if the row was aggregated, false if not due to hitting resource limits
+   * @return result that is ok if the row was aggregated, not ok if a resource limit was hit
    */
-  boolean aggregate(KeyType key, int keyHash);
+  AggregateResult aggregate(KeyType key, int keyHash);
 
   /**
    * Aggregate the current row with the provided key. Some implementations are thread-safe and
@@ -70,9 +71,9 @@ public interface Grouper<KeyType> extends Closeable
    *
    * @param key key
    *
-   * @return true if the row was aggregated, false if not due to hitting resource limits
+   * @return result that is ok if the row was aggregated, not ok if a resource limit was hit
    */
-  boolean aggregate(KeyType key);
+  AggregateResult aggregate(KeyType key);
 
   /**
    * Reset the grouper to its initial state.
@@ -178,9 +179,12 @@ public interface Grouper<KeyType> extends Closeable
      * Return an object that knows how to compare two serialized key instances. Will be called by the
      * {@link #iterator(boolean)} method if sorting is enabled.
      *
+     * @param forceDefaultOrder Return a comparator that sorts by the key in default lexicographic ascending order,
+     *                          regardless of any other conditions (e.g., presence of OrderBySpecs).
+     *
      * @return comparator for key objects.
      */
-    Comparator<T> objectComparator();
+    Comparator<Grouper.Entry<T>> objectComparator(boolean forceDefaultOrder);
   }
 
   /**
@@ -228,7 +232,19 @@ public interface Grouper<KeyType> extends Closeable
      *
      * @return comparator for keys
      */
-    KeyComparator bufferComparator();
+    BufferComparator bufferComparator();
+
+    /**
+     * When pushing down limits, it may also be necessary to compare aggregated values along with the key
+     * using the bufferComparator.
+     *
+     * @param aggregatorFactories Array of aggregators from a GroupByQuery
+     * @param aggregatorOffsets Offsets for each aggregator in aggregatorFactories pointing to their location
+     *                          within the grouping key + aggs buffer.
+     *
+     * @return comparator for keys + aggs
+     */
+    BufferComparator bufferComparatorWithAggregators(AggregatorFactory[] aggregatorFactories, int[] aggregatorOffsets);
 
     /**
      * Reset the keySerde to its initial state. After this method is called, {@link #fromByteBuffer(ByteBuffer, int)}
@@ -237,7 +253,7 @@ public interface Grouper<KeyType> extends Closeable
     void reset();
   }
 
-  interface KeyComparator
+  interface BufferComparator
   {
     int compare(ByteBuffer lhsBuffer, ByteBuffer rhsBuffer, int lhsPosition, int rhsPosition);
   }

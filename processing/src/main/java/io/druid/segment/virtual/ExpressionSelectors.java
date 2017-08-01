@@ -19,10 +19,14 @@
 
 package io.druid.segment.virtual;
 
+import com.google.common.base.Strings;
 import io.druid.math.expr.Expr;
+import io.druid.math.expr.ExprEval;
 import io.druid.query.extraction.ExtractionFn;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.ColumnSelectorFactory;
 import io.druid.segment.DimensionSelector;
+import io.druid.segment.DoubleColumnSelector;
 import io.druid.segment.FloatColumnSelector;
 import io.druid.segment.LongColumnSelector;
 
@@ -53,8 +57,14 @@ public class ExpressionSelectors
       @Override
       public long get()
       {
-        final Number number = baseSelector.get();
-        return number != null ? number.longValue() : nullValue;
+        final ExprEval exprEval = baseSelector.get();
+        return exprEval.isNull() ? nullValue : exprEval.asLong();
+      }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        inspector.visit("baseSelector", baseSelector);
       }
     }
     return new ExpressionLongColumnSelector();
@@ -72,11 +82,42 @@ public class ExpressionSelectors
       @Override
       public float get()
       {
-        final Number number = baseSelector.get();
-        return number != null ? number.floatValue() : nullValue;
+        final ExprEval exprEval = baseSelector.get();
+        return exprEval.isNull() ? nullValue : (float) exprEval.asDouble();
+      }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        inspector.visit("baseSelector", baseSelector);
       }
     }
     return new ExpressionFloatColumnSelector();
+  }
+
+  public static DoubleColumnSelector makeDoubleColumnSelector(
+      ColumnSelectorFactory columnSelectorFactory,
+      Expr expression,
+      double nullValue
+  )
+  {
+    final ExpressionObjectSelector baseSelector = ExpressionObjectSelector.from(columnSelectorFactory, expression);
+    class ExpressionDoubleColumnSelector implements DoubleColumnSelector
+    {
+      @Override
+      public double get()
+      {
+        final Double number = baseSelector.get().asDouble();
+        return number != null ? number.doubleValue() : nullValue;
+      }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        inspector.visit("baseSelector", baseSelector);
+      }
+    }
+    return new ExpressionDoubleColumnSelector();
   }
 
   public static DimensionSelector makeDimensionSelector(
@@ -93,8 +134,13 @@ public class ExpressionSelectors
         @Override
         protected String getValue()
         {
-          final Number number = baseSelector.get();
-          return number == null ? null : String.valueOf(number);
+          return Strings.emptyToNull(baseSelector.get().asString());
+        }
+
+        @Override
+        public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+        {
+          inspector.visit("baseSelector", baseSelector);
         }
       }
       return new DefaultExpressionDimensionSelector();
@@ -104,7 +150,14 @@ public class ExpressionSelectors
         @Override
         protected String getValue()
         {
-          return extractionFn.apply(baseSelector.get());
+          return extractionFn.apply(Strings.emptyToNull(baseSelector.get().asString()));
+        }
+
+        @Override
+        public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+        {
+          inspector.visit("baseSelector", baseSelector);
+          inspector.visit("extractionFn", extractionFn);
         }
       }
       return new ExtractionExpressionDimensionSelector();

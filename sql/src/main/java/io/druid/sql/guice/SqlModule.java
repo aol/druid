@@ -20,10 +20,10 @@
 package io.druid.sql.guice;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.inject.Binder;
 import com.google.inject.Inject;
 import com.google.inject.Module;
-import com.google.inject.Provides;
 import io.druid.guice.Jerseys;
 import io.druid.guice.JsonConfigProvider;
 import io.druid.guice.LazySingleton;
@@ -34,16 +34,56 @@ import io.druid.sql.avatica.AvaticaMonitor;
 import io.druid.sql.avatica.AvaticaServerConfig;
 import io.druid.sql.avatica.DruidAvaticaHandler;
 import io.druid.sql.calcite.aggregation.ApproxCountDistinctSqlAggregator;
+import io.druid.sql.calcite.aggregation.SqlAggregator;
+import io.druid.sql.calcite.expression.CeilOperatorConversion;
+import io.druid.sql.calcite.expression.ExtractOperatorConversion;
+import io.druid.sql.calcite.expression.FloorOperatorConversion;
+import io.druid.sql.calcite.expression.LookupOperatorConversion;
+import io.druid.sql.calcite.expression.MillisToTimestampOperatorConversion;
+import io.druid.sql.calcite.expression.RegexpExtractOperatorConversion;
+import io.druid.sql.calcite.expression.SqlOperatorConversion;
+import io.druid.sql.calcite.expression.SubstringOperatorConversion;
+import io.druid.sql.calcite.expression.TimeArithmeticOperatorConversion;
+import io.druid.sql.calcite.expression.TimeExtractOperatorConversion;
+import io.druid.sql.calcite.expression.TimeFloorOperatorConversion;
+import io.druid.sql.calcite.expression.TimeFormatOperatorConversion;
+import io.druid.sql.calcite.expression.TimeParseOperatorConversion;
+import io.druid.sql.calcite.expression.TimeShiftOperatorConversion;
+import io.druid.sql.calcite.expression.TimestampToMillisOperatorConversion;
 import io.druid.sql.calcite.planner.Calcites;
 import io.druid.sql.calcite.planner.PlannerConfig;
 import io.druid.sql.calcite.schema.DruidSchema;
+import io.druid.sql.calcite.view.NoopViewManager;
+import io.druid.sql.calcite.view.ViewManager;
 import io.druid.sql.http.SqlResource;
-import org.apache.calcite.schema.SchemaPlus;
 
+import java.util.List;
 import java.util.Properties;
 
 public class SqlModule implements Module
 {
+  public static final List<Class<? extends SqlAggregator>> DEFAULT_AGGREGATOR_CLASSES = ImmutableList.<Class<? extends SqlAggregator>>of(
+      ApproxCountDistinctSqlAggregator.class
+  );
+
+  public static final List<Class<? extends SqlOperatorConversion>> DEFAULT_OPERATOR_CONVERSION_CLASSES = ImmutableList.<Class<? extends SqlOperatorConversion>>builder()
+      .add(CeilOperatorConversion.class)
+      .add(ExtractOperatorConversion.class)
+      .add(FloorOperatorConversion.class)
+      .add(LookupOperatorConversion.class)
+      .add(MillisToTimestampOperatorConversion.class)
+      .add(RegexpExtractOperatorConversion.class)
+      .add(SubstringOperatorConversion.class)
+      .add(TimeArithmeticOperatorConversion.TimeMinusIntervalOperatorConversion.class)
+      .add(TimeArithmeticOperatorConversion.TimePlusIntervalOperatorConversion.class)
+      .add(TimeExtractOperatorConversion.class)
+      .add(TimeFloorOperatorConversion.class)
+      .add(TimeFormatOperatorConversion.class)
+      .add(TimeParseOperatorConversion.class)
+      .add(TimeShiftOperatorConversion.class)
+      .add(TimestampToMillisOperatorConversion.class)
+      .build();
+
   private static final String PROPERTY_SQL_ENABLE = "druid.sql.enable";
   private static final String PROPERTY_SQL_ENABLE_JSON_OVER_HTTP = "druid.sql.http.enable";
   private static final String PROPERTY_SQL_ENABLE_AVATICA = "druid.sql.avatica.enable";
@@ -64,7 +104,15 @@ public class SqlModule implements Module
       JsonConfigProvider.bind(binder, "druid.sql.planner", PlannerConfig.class);
       JsonConfigProvider.bind(binder, "druid.sql.avatica", AvaticaServerConfig.class);
       LifecycleModule.register(binder, DruidSchema.class);
-      SqlBindings.addAggregator(binder, ApproxCountDistinctSqlAggregator.class);
+      binder.bind(ViewManager.class).to(NoopViewManager.class).in(LazySingleton.class);
+
+      for (Class<? extends SqlAggregator> clazz : DEFAULT_AGGREGATOR_CLASSES) {
+        SqlBindings.addAggregator(binder, clazz);
+      }
+
+      for (Class<? extends SqlOperatorConversion> clazz : DEFAULT_OPERATOR_CONVERSION_CLASSES) {
+        SqlBindings.addOperatorConversion(binder, clazz);
+      }
 
       if (isJsonOverHttpEnabled()) {
         Jerseys.addResource(binder, SqlResource.class);
@@ -75,16 +123,6 @@ public class SqlModule implements Module
         JettyBindings.addHandler(binder, DruidAvaticaHandler.class);
         MetricsModule.register(binder, AvaticaMonitor.class);
       }
-    }
-  }
-
-  @Provides
-  public SchemaPlus createRootSchema(final DruidSchema druidSchema)
-  {
-    if (isEnabled()) {
-      return Calcites.createRootSchema(druidSchema);
-    } else {
-      throw new IllegalStateException("Cannot provide SchemaPlus when SQL is disabled.");
     }
   }
 

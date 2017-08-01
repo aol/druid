@@ -30,7 +30,6 @@ import io.druid.data.input.impl.DimensionsSpec;
 import io.druid.data.input.impl.StringInputRowParser;
 import io.druid.data.input.impl.TimestampSpec;
 import io.druid.jackson.DefaultObjectMapper;
-import io.druid.java.util.common.granularity.Granularities;
 import io.druid.java.util.common.guava.Sequences;
 import io.druid.query.Druids;
 import io.druid.query.QueryRunner;
@@ -46,7 +45,6 @@ import io.druid.query.select.SelectQueryRunnerFactory;
 import io.druid.query.select.SelectResultValue;
 import io.druid.segment.incremental.IncrementalIndex;
 import io.druid.segment.incremental.IncrementalIndexSchema;
-import io.druid.segment.incremental.OnheapIncrementalIndex;
 import org.joda.time.DateTime;
 import org.junit.Assert;
 import org.junit.Test;
@@ -55,6 +53,7 @@ import org.junit.runners.Parameterized;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -86,9 +85,11 @@ public class MapVirtualColumnTest
 
     final IncrementalIndexSchema schema = new IncrementalIndexSchema.Builder()
         .withMinTimestamp(new DateTime("2011-01-12T00:00:00.000Z").getMillis())
-        .withQueryGranularity(Granularities.NONE)
         .build();
-    final IncrementalIndex index = new OnheapIncrementalIndex(schema, true, 10000);
+    final IncrementalIndex index = new IncrementalIndex.Builder()
+        .setIndexSchema(schema)
+        .setMaxRowCount(10000)
+        .buildOnheap();
 
     final StringInputRowParser parser = new StringInputRowParser(
         new DelimitedParseSpec(
@@ -96,7 +97,9 @@ public class MapVirtualColumnTest
             new DimensionsSpec(DimensionsSpec.getDefaultSchemas(Arrays.asList("dim", "keys", "values")), null, null),
             "\t",
             ",",
-            Arrays.asList("ts", "dim", "keys", "values")
+            Arrays.asList("ts", "dim", "keys", "values"),
+            false,
+            0
         )
         , "utf8"
     );
@@ -162,8 +165,8 @@ public class MapVirtualColumnTest
             "params", mapOf("key1", "value1", "key5", "value5")
         )
     );
-    List<VirtualColumn> virtualColumns = Arrays.<VirtualColumn>asList(new MapVirtualColumn("keys", "values", "params"));
-    SelectQuery selectQuery = builder.dimensions(Arrays.asList("dim"))
+    List<VirtualColumn> virtualColumns = Collections.singletonList(new MapVirtualColumn("keys", "values", "params"));
+    SelectQuery selectQuery = builder.dimensions(Collections.singletonList("dim"))
                                      .metrics(Arrays.asList("params.key1", "params.key3", "params.key5", "params"))
                                      .virtualColumns(virtualColumns)
                                      .build();

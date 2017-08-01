@@ -34,7 +34,8 @@ import org.junit.Test;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-public class GranularityTest {
+public class GranularityTest
+{
 
     final Granularity SECOND = Granularities.SECOND;
     final Granularity MINUTE = Granularities.MINUTE;
@@ -47,7 +48,8 @@ public class GranularityTest {
     final Granularity YEAR = Granularities.YEAR;
 
     @Test
-    public void testHiveFormat() {
+    public void testHiveFormat()
+    {
         PathDate[] secondChecks = {
                 new PathDate(new DateTime(2011, 3, 15, 20, 50, 43, 0), null, "dt=2011-03-15-20-50-43/Test0"),
                 new PathDate(new DateTime(2011, 3, 15, 20, 50, 43, 0), null, "/dt=2011-03-15-20-50-43/Test0"),
@@ -123,7 +125,8 @@ public class GranularityTest {
     }
 
     @Test
-    public void testFifteenMinuteToDate() {
+    public void testFifteenMinuteToDate()
+    {
 
         PathDate[] minuteChecks = {
                 new PathDate(new DateTime(2011, 3, 15, 20, 45, 0, 0), null, "y=2011/m=03/d=15/H=20/M=50/S=43/Test0"),
@@ -298,24 +301,41 @@ public class GranularityTest {
             if (pd.exception == null) {
                 // check if path returns expected date
                 Assert.assertEquals(
-                        String.format("[%s,%s] Expected path %s to return date %s", granularity, formatter, pd.path, pd.date),
-                        pd.date,
-                        granularity.toDate(pd.path, formatter)
+                    StringUtils.format(
+                        "[%s,%s] Expected path %s to return date %s",
+                        granularity,
+                        formatter,
+                        pd.path,
+                        pd.date
+                    ),
+                    pd.date,
+                    granularity.toDate(pd.path, formatter)
                 );
 
                 if(formatter.equals(Granularity.Formatter.DEFAULT)) {
                     Assert.assertEquals(
-                            String.format("[%s] Expected toDate(%s) to return the same as toDate(%s, DEFAULT)", granularity, pd.path, pd.path),
-                            granularity.toDate(pd.path), granularity.toDate(pd.path, formatter)
+                        StringUtils.format(
+                            "[%s] Expected toDate(%s) to return the same as toDate(%s, DEFAULT)",
+                            granularity,
+                            pd.path,
+                            pd.path
+                        ),
+                        granularity.toDate(pd.path), granularity.toDate(pd.path, formatter)
                     );
                 }
 
                 if(pd.date != null) {
                     // check if formatter is readable by toDate
                     Assert.assertEquals(
-                            String.format("[%s,%s] Expected date %s to return date %s", granularity, formatter, pd.date, pd.date),
+                        StringUtils.format(
+                            "[%s,%s] Expected date %s to return date %s",
+                            granularity,
+                            formatter,
                             pd.date,
-                            granularity.toDate(granularity.getFormatter(formatter).print(pd.date) + "/", formatter)
+                            pd.date
+                        ),
+                        pd.date,
+                        granularity.toDate(granularity.getFormatter(formatter).print(pd.date) + "/", formatter)
                     );
                 }
             } else {
@@ -330,9 +350,13 @@ public class GranularityTest {
                 }
 
                 Assert.assertTrue(
-                        String.format(
-                                "[%s,%s] Expected exception %s for path: %s", granularity, formatter, pd.exception, pd.path
-                        ), flag
+                    StringUtils.format(
+                        "[%s,%s] Expected exception %s for path: %s",
+                        granularity,
+                        formatter,
+                        pd.exception,
+                        pd.path
+                    ), flag
                 );
             }
         }
@@ -422,7 +446,7 @@ public class GranularityTest {
         }
     }
 
-    private class PathDate
+    private static class PathDate
     {
         public final String path;
         public final DateTime date;

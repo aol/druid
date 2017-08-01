@@ -22,7 +22,7 @@ package io.druid.metadata;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.base.Supplier;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -40,6 +40,7 @@ import io.druid.concurrent.Execs;
 import io.druid.guice.ManageLifecycle;
 import io.druid.guice.annotations.Json;
 import io.druid.java.util.common.Pair;
+import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.lifecycle.LifecycleStart;
 import io.druid.java.util.common.lifecycle.LifecycleStop;
 import io.druid.server.coordinator.rules.ForeverLoadRule;
@@ -87,7 +88,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
             {
               List<Map<String, Object>> existing = handle
                   .createQuery(
-                      String.format(
+                      StringUtils.format(
                           "SELECT id from %s where datasource=:dataSource",
                           ruleTable
                       )
@@ -109,12 +110,12 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
               );
               final String version = new DateTime().toString();
               handle.createStatement(
-                  String.format(
+                  StringUtils.format(
                       "INSERT INTO %s (id, dataSource, version, payload) VALUES (:id, :dataSource, :version, :payload)",
                       ruleTable
                   )
               )
-                    .bind("id", String.format("%s_%s", defaultDatasourceName, version))
+                    .bind("id", StringUtils.format("%s_%s", defaultDatasourceName, version))
                     .bind("dataSource", defaultDatasourceName)
                     .bind("version", version)
                     .bind("payload", jsonMapper.writeValueAsBytes(defaultRules))
@@ -133,8 +134,8 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
   private static final EmittingLogger log = new EmittingLogger(SQLMetadataRuleManager.class);
 
   private final ObjectMapper jsonMapper;
-  private final Supplier<MetadataRuleManagerConfig> config;
-  private final Supplier<MetadataStorageTablesConfig> dbTables;
+  private final MetadataRuleManagerConfig config;
+  private final MetadataStorageTablesConfig dbTables;
   private final IDBI dbi;
   private final AtomicReference<ImmutableMap<String, List<Rule>>> rules;
   private final AuditManager auditManager;
@@ -151,8 +152,8 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
   @Inject
   public SQLMetadataRuleManager(
       @Json ObjectMapper jsonMapper,
-      Supplier<MetadataRuleManagerConfig> config,
-      Supplier<MetadataStorageTablesConfig> dbTables,
+      MetadataRuleManagerConfig config,
+      MetadataStorageTablesConfig dbTables,
       SQLMetadataConnector connector,
       AuditManager auditManager
   )
@@ -163,11 +164,16 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
     this.dbi = connector.getDBI();
     this.auditManager = auditManager;
 
+    // Verify configured Periods can be treated as Durations (fail-fast before they're needed).
+    Preconditions.checkNotNull(config.getAlertThreshold().toStandardDuration());
+    Preconditions.checkNotNull(config.getPollDuration().toStandardDuration());
+
     this.rules = new AtomicReference<>(
         ImmutableMap.<String, List<Rule>>of()
     );
   }
 
+  @Override
   @LifecycleStart
   public void start()
   {
@@ -178,7 +184,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
 
       exec = MoreExecutors.listeningDecorator(Execs.scheduledSingleThreaded("DatabaseRuleManager-Exec--%d"));
 
-      createDefaultRule(dbi, getRulesTable(), config.get().getDefaultRule(), jsonMapper);
+      createDefaultRule(dbi, getRulesTable(), config.getDefaultRule(), jsonMapper);
       future = exec.scheduleWithFixedDelay(
           new Runnable()
           {
@@ -194,7 +200,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
             }
           },
           0,
-          config.get().getPollDuration().toStandardDuration().getMillis(),
+          config.getPollDuration().toStandardDuration().getMillis(),
           TimeUnit.MILLISECONDS
       );
 
@@ -202,6 +208,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
     }
   }
 
+  @Override
   @LifecycleStop
   public void stop()
   {
@@ -220,6 +227,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
     }
   }
 
+  @Override
   public void poll()
   {
     try {
@@ -232,7 +240,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
                 {
                   return handle.createQuery(
                       // Return latest version rule by dataSource
-                      String.format(
+                      StringUtils.format(
                           "SELECT r.dataSource, r.payload "
                           + "FROM %1$s r "
                           + "INNER JOIN(SELECT dataSource, max(version) as version FROM %1$s GROUP BY dataSource) ds "
@@ -300,7 +308,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
         retryStartTime = System.currentTimeMillis();
       }
 
-      if (System.currentTimeMillis() - retryStartTime > config.get().getAlertThreshold().getMillis()) {
+      if (System.currentTimeMillis() - retryStartTime > config.getAlertThreshold().toStandardDuration().getMillis()) {
         log.makeAlert(e, "Exception while polling for rules")
            .emit();
         retryStartTime = 0;
@@ -310,17 +318,20 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
     }
   }
 
+  @Override
   public Map<String, List<Rule>> getAllRules()
   {
     return rules.get();
   }
 
+  @Override
   public List<Rule> getRules(final String dataSource)
   {
     List<Rule> retVal = rules.get().get(dataSource);
     return retVal == null ? Lists.<Rule>newArrayList() : retVal;
   }
 
+  @Override
   public List<Rule> getRulesWithDefault(final String dataSource)
   {
     List<Rule> retVal = Lists.newArrayList();
@@ -328,12 +339,13 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
     if (theRules.get(dataSource) != null) {
       retVal.addAll(theRules.get(dataSource));
     }
-    if (theRules.get(config.get().getDefaultRule()) != null) {
-      retVal.addAll(theRules.get(config.get().getDefaultRule()));
+    if (theRules.get(config.getDefaultRule()) != null) {
+      retVal.addAll(theRules.get(config.getDefaultRule()));
     }
     return retVal;
   }
 
+  @Override
   public boolean overrideRule(final String dataSource, final List<Rule> newRules, final AuditInfo auditInfo)
   {
     final String ruleString;
@@ -366,12 +378,12 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
                 );
                 String version = auditTime.toString();
                 handle.createStatement(
-                    String.format(
+                    StringUtils.format(
                         "INSERT INTO %s (id, dataSource, version, payload) VALUES (:id, :dataSource, :version, :payload)",
                         getRulesTable()
                     )
                 )
-                      .bind("id", String.format("%s_%s", dataSource, version))
+                      .bind("id", StringUtils.format("%s_%s", dataSource, version))
                       .bind("dataSource", dataSource)
                       .bind("version", version)
                       .bind("payload", jsonMapper.writeValueAsBytes(newRules))
@@ -383,7 +395,7 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
         );
       }
       catch (Exception e) {
-        log.error(e, String.format("Exception while overriding rule for %s", dataSource));
+        log.error(e, StringUtils.format("Exception while overriding rule for %s", dataSource));
         return false;
       }
     }
@@ -391,13 +403,13 @@ public class SQLMetadataRuleManager implements MetadataRuleManager
       poll();
     }
     catch (Exception e) {
-      log.error(e, String.format("Exception while polling for rules after overriding the rule for %s", dataSource));
+      log.error(e, StringUtils.format("Exception while polling for rules after overriding the rule for %s", dataSource));
     }
     return true;
   }
 
   private String getRulesTable()
   {
-    return dbTables.get().getRulesTable();
+    return dbTables.getRulesTable();
   }
 }

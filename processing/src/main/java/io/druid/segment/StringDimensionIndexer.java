@@ -19,7 +19,6 @@
 
 package io.druid.segment;
 
-import com.google.common.base.Function;
 import com.google.common.base.Predicate;
 import com.google.common.base.Predicates;
 import com.google.common.base.Strings;
@@ -29,9 +28,12 @@ import com.google.common.primitives.Ints;
 import io.druid.collections.bitmap.BitmapFactory;
 import io.druid.collections.bitmap.MutableBitmap;
 import io.druid.data.input.impl.DimensionSchema.MultiValueHandling;
+import io.druid.java.util.common.ISE;
+import io.druid.java.util.common.guava.Comparators;
 import io.druid.query.dimension.DimensionSpec;
 import io.druid.query.extraction.ExtractionFn;
 import io.druid.query.filter.ValueMatcher;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.column.ValueType;
 import io.druid.segment.data.ArrayBasedIndexedInts;
 import io.druid.segment.data.Indexed;
@@ -41,47 +43,22 @@ import io.druid.segment.filter.BooleanValueMatcher;
 import io.druid.segment.incremental.IncrementalIndex;
 import io.druid.segment.incremental.IncrementalIndexStorageAdapter;
 import it.unimi.dsi.fastutil.ints.IntArrays;
+import it.unimi.dsi.fastutil.ints.IntIterator;
+import it.unimi.dsi.fastutil.objects.Object2IntRBTreeMap;
+import it.unimi.dsi.fastutil.objects.Object2IntSortedMap;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], String>
 {
-  public static final Function<Object, String> STRING_TRANSFORMER = new Function<Object, String>()
-  {
-    @Override
-    public String apply(final Object o)
-    {
-      if (o == null) {
-        return null;
-      }
-      if (o instanceof String) {
-        return (String) o;
-      }
-      return o.toString();
-    }
-  };
-
-  public static final Comparator<String> UNENCODED_COMPARATOR = new Comparator<String>()
-  {
-    @Override
-    public int compare(String o1, String o2)
-    {
-      if (o1 == null) {
-        return o2 == null ? 0 : -1;
-      }
-      if (o2 == null) {
-        return 1;
-      }
-      return o1.compareTo(o2);
-    }
-  };
+  private static final Function<Object, String> STRING_TRANSFORMER = o -> o != null ? o.toString() : null;
 
   private static class DimensionDictionary
   {
@@ -174,7 +151,7 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
 
     public SortedDimensionDictionary(List<String> idToValue, int length)
     {
-      Map<String, Integer> sortedMap = Maps.newTreeMap();
+      Object2IntSortedMap<String> sortedMap = new Object2IntRBTreeMap<>();
       for (int id = 0; id < length; id++) {
         sortedMap.put(idToValue.get(id), id);
       }
@@ -182,7 +159,8 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
       this.idToIndex = new int[length];
       this.indexToId = new int[length];
       int index = 0;
-      for (Integer id : sortedMap.values()) {
+      for (IntIterator iterator = sortedMap.values().iterator(); iterator.hasNext();) {
+        int id = iterator.nextInt();
         idToIndex[id] = index;
         indexToId[index] = id;
         index++;
@@ -246,7 +224,7 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
         }
         if (multiValueHandling.needSorting()) {
           // Sort multival row by their unencoded values first.
-          Arrays.sort(dimensionValues, UNENCODED_COMPARATOR);
+          Arrays.sort(dimensionValues, Comparators.naturalNullsFirst());
         }
 
         final int[] retVal = new int[dimensionValues.length];
@@ -325,6 +303,12 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
       {
         return IndexedIterable.create(this).iterator();
       }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        // nothing to inspect
+      }
     };
   }
 
@@ -397,6 +381,8 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
 
     class IndexerDimensionSelector implements DimensionSelector, IdLookup
     {
+      private int[] nullIdIntArray;
+
       @Override
       public IndexedInts getRow()
       {
@@ -411,27 +397,27 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
 
         int[] row = null;
         int rowSize = 0;
+
+        // usually due to currEntry's rowIndex is smaller than the row's rowIndex in which this dim first appears
         if (indices == null || indices.length == 0) {
           final int nullId = getEncodedValue(null, false);
           if (nullId > -1) {
-            if (nullId < maxId) {
-              row = new int[] {nullId};
-              rowSize = 1;
-            } else {
-              // Choose to use ArrayBasedIndexedInts later, instead of EmptyIndexedInts, for monomorphism
-              row = IntArrays.EMPTY_ARRAY;
-              rowSize = 0;
+            if (nullIdIntArray == null) {
+              nullIdIntArray = new int[] {nullId};
             }
+            row = nullIdIntArray;
+            rowSize = 1;
+          } else {
+            // doesn't contain nullId, then empty array is used
+            // Choose to use ArrayBasedIndexedInts later, instead of EmptyIndexedInts, for monomorphism
+            row = IntArrays.EMPTY_ARRAY;
+            rowSize = 0;
           }
         }
 
         if (row == null && indices != null && indices.length > 0) {
-          row = new int[indices.length];
-          for (int id : indices) {
-            if (id < maxId) {
-              row[rowSize++] = id;
-            }
-          }
+          row = indices;
+          rowSize = indices.length;
         }
 
         return ArrayBasedIndexedInts.of(row, rowSize);
@@ -464,6 +450,12 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
                   }
                 }
                 return false;
+              }
+
+              @Override
+              public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+              {
+                // nothing to inspect
               }
             };
           } else {
@@ -502,6 +494,12 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
             }
             return false;
           }
+
+          @Override
+          public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+          {
+            // nothing to inspect
+          }
         };
       }
 
@@ -514,6 +512,9 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
       @Override
       public String lookupName(int id)
       {
+        if (id >= maxId) {
+          throw new ISE("id[%d] >= maxId[%d]", id, maxId);
+        }
         final String strValue = getActualValue(id, false);
         return extractionFn == null ? strValue : extractionFn.apply(strValue);
       }
@@ -541,6 +542,12 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
         }
         return getEncodedValue(name, false);
       }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        inspector.visit("currEntry", currEntry);
+      }
     }
     return new IndexerDimensionSelector();
   }
@@ -559,6 +566,14 @@ public class StringDimensionIndexer implements DimensionIndexer<Integer, int[], 
   )
   {
     return ZeroFloatColumnSelector.instance();
+  }
+
+  @Override
+  public DoubleColumnSelector makeDoubleColumnSelector(
+      IncrementalIndexStorageAdapter.EntryHolder currEntry, IncrementalIndex.DimensionDesc desc
+  )
+  {
+    return ZeroDoubleColumnSelector.instance();
   }
 
   @Override

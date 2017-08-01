@@ -22,9 +22,8 @@ package io.druid.cli;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-
 import io.druid.guice.ExtensionsConfig;
-import io.druid.java.util.common.ISE;
+import io.druid.java.util.common.StringUtils;
 import io.tesla.aether.internal.DefaultTeslaAether;
 import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
@@ -140,7 +139,7 @@ public class PullDependenciesTest
       final String version = artifact.getVersion();
       for (int i = 0; i < jarNames.size(); ++i) {
         expectedJars[i] = new File(
-            String.format(
+            StringUtils.format(
                 "%s/%s/%s/%s",
                 rootHadoopDependenciesDir,
                 artifactId,
@@ -151,7 +150,7 @@ public class PullDependenciesTest
       }
     } else {
       for (int i = 0; i < jarNames.size(); ++i) {
-        expectedJars[i] = new File(String.format("%s/%s/%s", rootExtensionsDir, artifactId, jarNames.get(i)));
+        expectedJars[i] = new File(StringUtils.format("%s/%s/%s", rootExtensionsDir, artifactId, jarNames.get(i)));
       }
     }
     return expectedJars;
@@ -168,9 +167,9 @@ public class PullDependenciesTest
   }
 
   /**
-   * A file exists on the root extension directory path, but it's not a directory, throw ISE.
+   * A file exists on the root extension directory path, but it's not a directory, throw exception.
    */
-  @Test(expected = ISE.class)
+  @Test(expected = RuntimeException.class)
   public void testPullDependencies_root_extension_dir_bad_state() throws IOException
   {
     Assert.assertTrue(rootExtensionsDir.createNewFile());
@@ -188,9 +187,9 @@ public class PullDependenciesTest
   }
 
   /**
-   * A file exists on the root hadoop dependencies directory path, but it's not a directory, throw ISE.
+   * A file exists on the root hadoop dependencies directory path, but it's not a directory, throw exception.
    */
-  @Test(expected = ISE.class)
+  @Test(expected = RuntimeException.class)
   public void testPullDependencies_root_hadoop_dependencies_dir_bad_state() throws IOException
   {
     Assert.assertTrue(rootHadoopDependenciesDir.createNewFile());

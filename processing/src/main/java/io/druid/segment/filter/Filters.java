@@ -22,12 +22,11 @@ package io.druid.segment.filter;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import io.druid.collections.bitmap.ImmutableBitmap;
-import io.druid.common.guava.GuavaUtils;
 import io.druid.java.util.common.guava.FunctionalIterable;
+import io.druid.query.BitmapResultFactory;
 import io.druid.query.ColumnSelectorPlus;
 import io.druid.query.Query;
 import io.druid.query.dimension.DefaultDimensionSpec;
@@ -40,6 +39,7 @@ import io.druid.query.filter.Filter;
 import io.druid.query.filter.ValueMatcher;
 import io.druid.query.filter.ValueMatcherColumnSelectorStrategy;
 import io.druid.query.filter.ValueMatcherColumnSelectorStrategyFactory;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.ColumnSelector;
 import io.druid.segment.ColumnSelectorFactory;
 import io.druid.segment.DimensionHandlerUtils;
@@ -67,7 +67,8 @@ public class Filters
   public static final List<ValueType> FILTERABLE_TYPES = ImmutableList.of(
       ValueType.STRING,
       ValueType.LONG,
-      ValueType.FLOAT
+      ValueType.FLOAT,
+      ValueType.DOUBLE
   );
   private static final String CTX_KEY_USE_FILTER_CNF = "useFilterCNF";
 
@@ -234,25 +235,26 @@ public class Filters
    *
    * @param dimension dimension to look at
    * @param selector  bitmap selector
+   * @param bitmapResultFactory
    * @param predicate predicate to use
-   *
    * @return bitmap of matching rows
    *
    * @see #estimateSelectivity(String, BitmapIndexSelector, Predicate)
    */
-  public static ImmutableBitmap matchPredicate(
+  public static <T> T matchPredicate(
       final String dimension,
       final BitmapIndexSelector selector,
+      BitmapResultFactory<T> bitmapResultFactory,
       final Predicate<String> predicate
   )
   {
-    return selector.getBitmapFactory().union(matchPredicateNoUnion(dimension, selector, predicate));
+    return bitmapResultFactory.unionDimensionValueBitmaps(matchPredicateNoUnion(dimension, selector, predicate));
   }
 
   /**
    * Return an iterable of bitmaps for all values matching a particular predicate. Unioning these bitmaps
-   * yields the same result that {@link #matchPredicate(String, BitmapIndexSelector, Predicate)} would have
-   * returned.
+   * yields the same result that {@link #matchPredicate(String, BitmapIndexSelector, BitmapResultFactory, Predicate)}
+   * would have returned.
    *
    * @param dimension dimension to look at
    * @param selector  bitmap selector
@@ -290,7 +292,7 @@ public class Filters
    *
    * @return estimated selectivity
    *
-   * @see #matchPredicate(String, BitmapIndexSelector, Predicate)
+   * @see #matchPredicate(String, BitmapIndexSelector, BitmapResultFactory, Predicate)
    */
   public static double estimateSelectivity(
       final String dimension,
@@ -443,33 +445,6 @@ public class Filters
     return false;
   }
 
-  public static ValueMatcher getLongValueMatcher(
-      final LongColumnSelector longSelector,
-      final String value
-  )
-  {
-    if (Strings.isNullOrEmpty(value)) {
-      return BooleanValueMatcher.of(false);
-    }
-
-    final Long longValue = GuavaUtils.tryParseLong(value);
-    if (longValue == null) {
-      return BooleanValueMatcher.of(false);
-    }
-
-    return new ValueMatcher()
-    {
-      // store the primitive, so we don't unbox for every comparison
-      final long unboxedLong = longValue;
-
-      @Override
-      public boolean matches()
-      {
-        return longSelector.get() == unboxedLong;
-      }
-    };
-  }
-
   public static ValueMatcher getLongPredicateMatcher(
       final LongColumnSelector longSelector,
       final DruidLongPredicate predicate
@@ -481,6 +456,13 @@ public class Filters
       public boolean matches()
       {
         return predicate.applyLong(longSelector.get());
+      }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        inspector.visit("longSelector", longSelector);
+        inspector.visit("predicate", predicate);
       }
     };
   }

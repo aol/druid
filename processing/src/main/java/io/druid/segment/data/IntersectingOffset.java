@@ -19,16 +19,16 @@
 
 package io.druid.segment.data;
 
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
+
 /**
  */
-public class IntersectingOffset implements Offset {
+public class IntersectingOffset extends Offset
+{
   private final Offset lhs;
   private final Offset rhs;
 
-  public IntersectingOffset(
-      Offset lhs,
-      Offset rhs
-  )
+  public IntersectingOffset(Offset lhs, Offset rhs)
   {
     this.lhs = lhs;
     this.rhs = rhs;
@@ -37,12 +37,14 @@ public class IntersectingOffset implements Offset {
   }
 
   @Override
-  public int getOffset() {
+  public int getOffset()
+  {
     return lhs.getOffset();
   }
 
   @Override
-  public void increment() {
+  public void increment()
+  {
     lhs.increment();
     rhs.increment();
 
@@ -51,7 +53,7 @@ public class IntersectingOffset implements Offset {
 
   private void findIntersection()
   {
-    if (! (lhs.withinBounds() && rhs.withinBounds())) {
+    if (!(lhs.withinBounds() && rhs.withinBounds())) {
       return;
     }
 
@@ -80,7 +82,8 @@ public class IntersectingOffset implements Offset {
   }
 
   @Override
-  public boolean withinBounds() {
+  public boolean withinBounds()
+  {
     return lhs.withinBounds() && rhs.withinBounds();
   }
 
@@ -90,5 +93,12 @@ public class IntersectingOffset implements Offset {
     final Offset lhsClone = lhs.clone();
     final Offset rhsClone = rhs.clone();
     return new IntersectingOffset(lhsClone, rhsClone);
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    inspector.visit("lhs", lhs);
+    inspector.visit("rhs", rhs);
   }
 }

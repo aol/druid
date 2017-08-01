@@ -20,13 +20,24 @@
 package io.druid.query.aggregation.distinctcount;
 
 import io.druid.query.aggregation.BufferAggregator;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 
 import java.nio.ByteBuffer;
 
-public class EmptyDistinctCountBufferAggregator implements BufferAggregator
+/**
+ * The difference from {@link io.druid.query.aggregation.NoopBufferAggregator} is that
+ * EmptyDistinctCountBufferAggregator returns 0 instead of null from {@link #get(ByteBuffer, int)}.
+ */
+public final class EmptyDistinctCountBufferAggregator implements BufferAggregator
 {
+  private static final EmptyDistinctCountBufferAggregator INSTANCE = new EmptyDistinctCountBufferAggregator();
 
-  public EmptyDistinctCountBufferAggregator()
+  static EmptyDistinctCountBufferAggregator instance()
+  {
+    return INSTANCE;
+  }
+
+  private EmptyDistinctCountBufferAggregator()
   {
   }
 
@@ -59,7 +70,19 @@ public class EmptyDistinctCountBufferAggregator implements BufferAggregator
   }
 
   @Override
+  public double getDouble(ByteBuffer buf, int position)
+  {
+    return 0;
+  }
+
+  @Override
   public void close()
   {
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    // nothing to inspect
   }
 }

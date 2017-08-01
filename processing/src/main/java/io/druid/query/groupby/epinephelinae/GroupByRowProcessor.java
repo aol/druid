@@ -27,6 +27,7 @@ import io.druid.collections.ResourceHolder;
 import io.druid.common.guava.SettableSupplier;
 import io.druid.data.input.Row;
 import io.druid.java.util.common.Pair;
+import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.guava.Accumulator;
 import io.druid.java.util.common.guava.BaseSequence;
 import io.druid.java.util.common.guava.CloseQuietly;
@@ -79,7 +80,7 @@ public class GroupByRowProcessor
 
     final File temporaryStorageDirectory = new File(
         processingTmpDir,
-        String.format("druid-groupBy-%s_%s", UUID.randomUUID(), query.getId())
+        StringUtils.format("druid-groupBy-%s_%s", UUID.randomUUID(), query.getId())
     );
 
     final List<Interval> queryIntervals = query.getIntervals();
@@ -139,7 +140,7 @@ public class GroupByRowProcessor
 
               closeOnExit.add(temporaryStorage);
 
-              Pair<Grouper<RowBasedKey>, Accumulator<Grouper<RowBasedKey>, Row>> pair = RowBasedGrouperHelper.createGrouperAccumulatorPair(
+              Pair<Grouper<RowBasedKey>, Accumulator<AggregateResult, Row>> pair = RowBasedGrouperHelper.createGrouperAccumulatorPair(
                   query,
                   true,
                   rowSignature,
@@ -160,15 +161,12 @@ public class GroupByRowProcessor
                   aggregatorFactories
               );
               final Grouper<RowBasedKey> grouper = pair.lhs;
-              final Accumulator<Grouper<RowBasedKey>, Row> accumulator = pair.rhs;
+              final Accumulator<AggregateResult, Row> accumulator = pair.rhs;
               closeOnExit.add(grouper);
 
-              final Grouper<RowBasedKey> retVal = filteredSequence.accumulate(
-                  grouper,
-                  accumulator
-              );
-              if (retVal != grouper) {
-                throw GroupByQueryHelper.throwAccumulationResourceLimitExceededException();
+              final AggregateResult retVal = filteredSequence.accumulate(AggregateResult.ok(), accumulator);
+              if (!retVal.isOk()) {
+                throw new ResourceLimitExceededException(retVal.getReason());
               }
 
               return RowBasedGrouperHelper.makeGrouperIterator(

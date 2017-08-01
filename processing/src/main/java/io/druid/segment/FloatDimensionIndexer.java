@@ -22,11 +22,13 @@ package io.druid.segment;
 import io.druid.collections.bitmap.BitmapFactory;
 import io.druid.collections.bitmap.MutableBitmap;
 import io.druid.query.dimension.DimensionSpec;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.column.ValueType;
 import io.druid.segment.data.Indexed;
 import io.druid.segment.incremental.IncrementalIndex;
 import io.druid.segment.incremental.IncrementalIndexStorageAdapter;
 
+import javax.annotation.Nullable;
 import java.util.List;
 
 public class FloatDimensionIndexer implements DimensionIndexer<Float, Float, Float>
@@ -68,13 +70,13 @@ public class FloatDimensionIndexer implements DimensionIndexer<Float, Float, Flo
   @Override
   public Float getMinValue()
   {
-    return Float.MIN_VALUE;
+    return Float.NEGATIVE_INFINITY;
   }
 
   @Override
   public Float getMaxValue()
   {
-    return Float.MAX_VALUE;
+    return Float.POSITIVE_INFINITY;
   }
 
   @Override
@@ -115,6 +117,12 @@ public class FloatDimensionIndexer implements DimensionIndexer<Float, Float, Flo
         float floatVal = (Float) dims[dimIndex];
         return (long) floatVal;
       }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        // nothing to inspect
+      }
     }
 
     return new IndexerLongColumnSelector();
@@ -135,10 +143,16 @@ public class FloatDimensionIndexer implements DimensionIndexer<Float, Float, Flo
         final Object[] dims = currEntry.getKey().getDims();
 
         if (dimIndex >= dims.length) {
-          return 0L;
+          return 0.0f;
         }
 
         return (Float) dims[dimIndex];
+      }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        // nothing to inspect
       }
     }
 
@@ -167,7 +181,7 @@ public class FloatDimensionIndexer implements DimensionIndexer<Float, Float, Flo
         final Object[] dims = currEntry.getKey().getDims();
 
         if (dimIndex >= dims.length) {
-          return 0L;
+          return DimensionHandlerUtils.ZERO_FLOAT;
         }
 
         return dims[dimIndex];
@@ -178,21 +192,51 @@ public class FloatDimensionIndexer implements DimensionIndexer<Float, Float, Flo
   }
 
   @Override
-  public int compareUnsortedEncodedKeyComponents(Float lhs, Float rhs)
+  public DoubleColumnSelector makeDoubleColumnSelector(
+      IncrementalIndexStorageAdapter.EntryHolder currEntry, IncrementalIndex.DimensionDesc desc
+  )
   {
-    return lhs.compareTo(rhs);
+    final int dimIndex = desc.getIndex();
+    class IndexerDoubleColumnSelector implements DoubleColumnSelector
+    {
+      @Override
+      public double get()
+      {
+        final Object[] dims = currEntry.getKey().getDims();
+
+        if (dimIndex >= dims.length) {
+          return 0.0;
+        }
+        float floatVal = (Float) dims[dimIndex];
+        return (double) floatVal;
+      }
+
+      @Override
+      public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+      {
+        // nothing to inspect
+      }
+    }
+
+    return new IndexerDoubleColumnSelector();
   }
 
   @Override
-  public boolean checkUnsortedEncodedKeyComponentsEqual(Float lhs, Float rhs)
+  public int compareUnsortedEncodedKeyComponents(@Nullable Float lhs, @Nullable Float rhs)
   {
-    return lhs.equals(rhs);
+    return DimensionHandlerUtils.nullToZero(lhs).compareTo(DimensionHandlerUtils.nullToZero(rhs));
   }
 
   @Override
-  public int getUnsortedEncodedKeyComponentHashCode(Float key)
+  public boolean checkUnsortedEncodedKeyComponentsEqual(@Nullable Float lhs, @Nullable Float rhs)
   {
-    return key.hashCode();
+    return DimensionHandlerUtils.nullToZero(lhs).equals(DimensionHandlerUtils.nullToZero(rhs));
+  }
+
+  @Override
+  public int getUnsortedEncodedKeyComponentHashCode(@Nullable Float key)
+  {
+    return DimensionHandlerUtils.nullToZero(key).hashCode();
   }
 
   @Override

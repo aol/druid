@@ -22,7 +22,9 @@ package io.druid.query.groupby.epinephelinae;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import io.druid.java.util.common.ISE;
+import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.logger.Logger;
+import org.apache.commons.io.FileUtils;
 
 import java.io.Closeable;
 import java.io.File;
@@ -78,11 +80,9 @@ public class LimitedTemporaryStorage implements Closeable
         throw new ISE("Closed");
       }
 
-      if (!storageDirectory.exists() && !storageDirectory.mkdir()) {
-        throw new IOException(String.format("Cannot create storageDirectory: %s", storageDirectory));
-      }
+      FileUtils.forceMkdir(storageDirectory);
 
-      final File theFile = new File(storageDirectory, String.format("%08d.tmp", files.size()));
+      final File theFile = new File(storageDirectory, StringUtils.format("%08d.tmp", files.size()));
       final EnumSet<StandardOpenOption> openOptions = EnumSet.of(
           StandardOpenOption.CREATE_NEW,
           StandardOpenOption.WRITE

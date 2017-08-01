@@ -23,20 +23,22 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.google.common.base.Preconditions;
-
 import io.druid.java.util.common.IAE;
 import io.druid.java.util.common.StringUtils;
 import io.druid.query.aggregation.Aggregator;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.AggregatorFactoryNotMergeableException;
-import io.druid.query.aggregation.Aggregators;
+import io.druid.query.aggregation.AggregatorUtil;
 import io.druid.query.aggregation.BufferAggregator;
+import io.druid.query.aggregation.NoopAggregator;
+import io.druid.query.aggregation.NoopBufferAggregator;
 import io.druid.segment.ColumnSelectorFactory;
 import io.druid.segment.ObjectColumnSelector;
 import org.apache.commons.codec.binary.Base64;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -46,8 +48,6 @@ import java.util.Objects;
 @JsonTypeName("variance")
 public class VarianceAggregatorFactory extends AggregatorFactory
 {
-  protected static final byte CACHE_TYPE_ID = 16;
-
   protected final String fieldName;
   protected final String name;
   protected final String estimator;
@@ -95,7 +95,7 @@ public class VarianceAggregatorFactory extends AggregatorFactory
   {
     ObjectColumnSelector selector = metricFactory.makeObjectColumnSelector(fieldName);
     if (selector == null) {
-      return Aggregators.noopAggregator();
+      return NoopAggregator.instance();
     }
 
     if ("float".equalsIgnoreCase(inputType)) {
@@ -115,7 +115,7 @@ public class VarianceAggregatorFactory extends AggregatorFactory
   {
     ObjectColumnSelector selector = metricFactory.makeObjectColumnSelector(fieldName);
     if (selector == null) {
-      return Aggregators.noopBufferAggregator();
+      return NoopBufferAggregator.instance();
     }
     if ("float".equalsIgnoreCase(inputType)) {
       return new VarianceBufferAggregator.FloatVarianceAggregator(
@@ -218,7 +218,7 @@ public class VarianceAggregatorFactory extends AggregatorFactory
   @Override
   public List<String> requiredFields()
   {
-    return Arrays.asList(fieldName);
+    return Collections.singletonList(fieldName);
   }
 
   @Override
@@ -227,7 +227,7 @@ public class VarianceAggregatorFactory extends AggregatorFactory
     byte[] fieldNameBytes = StringUtils.toUtf8(fieldName);
     byte[] inputTypeBytes = StringUtils.toUtf8(inputType);
     return ByteBuffer.allocate(2 + fieldNameBytes.length + 1 + inputTypeBytes.length)
-                     .put(CACHE_TYPE_ID)
+                     .put(AggregatorUtil.VARIANCE_CACHE_TYPE_ID)
                      .put(isVariancePop ? (byte) 1 : 0)
                      .put(fieldNameBytes)
                      .put((byte) 0xFF)

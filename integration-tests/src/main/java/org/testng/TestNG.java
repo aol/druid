@@ -151,7 +151,7 @@ public class TestNG
 
   private static TestNG m_instance;
 
-  private static JCommander m_jCommander;
+  protected static JCommander m_jCommander;
 
   private List<String> m_commandLineMethods;
   protected List<XmlSuite> m_suites = Lists.newArrayList();
@@ -283,7 +283,7 @@ public class TestNG
    *
    * @see org.testng.reporters.TestHTMLReporter
    * @see org.testng.reporters.JUnitXMLReporter
-   * @see org.testng.reporters.XMLReporter
+   * @see XMLReporter
    */
   public void setUseDefaultListeners(boolean useDefaultListeners)
   {
@@ -384,7 +384,6 @@ public class TestNG
         while (t.getCause() != null) {
           t = t.getCause();
         }
-//        t.printStackTrace();
         if (t instanceof TestNGException) {
           throw (TestNGException) t;
         } else {
@@ -421,7 +420,6 @@ public class TestNG
       Utils.log("TestNG", 2, "Trying to open jar file:" + jarFile);
 
       JarFile jf = new JarFile(jarFile);
-//      System.out.println("   result: " + jf);
       Enumeration<JarEntry> entries = jf.entries();
       List<String> classes = Lists.newArrayList();
       boolean foundTestngXml = false;
@@ -703,7 +701,7 @@ public class TestNG
    *
    * @param suites
    *
-   * @see org.testng.xml.XmlSuite
+   * @see XmlSuite
    */
   public void setXmlSuites(List<XmlSuite> suites)
   {
@@ -956,10 +954,10 @@ public class TestNG
     }
   }
 
-  private void addReporter(Class<? extends IReporter> r)
+  private void addReporter(Class<? extends IReporter> reporterClass)
   {
-    if (!m_reporters.contains(r)) {
-      m_reporters.add(ClassHelper.newInstance(r));
+    if (m_reporters.stream().noneMatch(reporterClass::isInstance)) {
+      m_reporters.add(ClassHelper.newInstance(reporterClass));
     }
   }
 
@@ -1055,10 +1053,6 @@ public class TestNG
       }
       Iterable<ITestNGListener> loader =
           (Iterable<ITestNGListener>) loadMethod.invoke(c, parameters.toArray());
-//      Object loader = c.
-//      ServiceLoader<ITestNGListener> loader = m_serviceLoaderClassLoader != null
-//      ? ServiceLoader.load(ITestNGListener.class, m_serviceLoaderClassLoader)
-//          : ServiceLoader.load(ITestNGListener.class);
       for (ITestNGListener l : loader) {
         Utils.log("[TestNG]", 2, "Adding ServiceLoader listener:" + l);
         addListener(l);
@@ -1154,25 +1148,21 @@ public class TestNG
 
     m_start = System.currentTimeMillis();
 
-    //
-    // Slave mode
-    //
     if (m_slavefileName != null) {
+      //
+      // Slave mode
+      //
       SuiteSlave slave = new SuiteSlave(m_slavefileName, this);
       slave.waitForSuites();
-    }
-
-    //
-    // Regular mode
-    //
-    else if (m_masterfileName == null) {
+    } else if (m_masterfileName == null) {
+      //
+      // Regular mode
+      //
       suiteRunners = runSuitesLocally();
-    }
-
-    //
-    // Master mode
-    //
-    else {
+    } else {
+      //
+      // Master mode
+      //
       SuiteDispatcher dispatcher = new SuiteDispatcher(m_masterfileName);
       suiteRunners = dispatcher.dispatch(
           getConfiguration(),
@@ -1551,11 +1541,6 @@ public class TestNG
     if (cla.testNames != null) {
       setTestNames(Arrays.asList(cla.testNames.split(",")));
     }
-
-//    List<String> testNgXml = (List<String>) cmdLineArgs.get(CommandLineArgs.SUITE_DEF);
-//    if (null != testNgXml) {
-//      setTestSuites(testNgXml);
-//    }
 
     // Note: can't use a Boolean field here because we are allowing a boolean
     // parameter with an arity of 1 ("-usedefaultlisteners false")
@@ -2127,7 +2112,7 @@ public class TestNG
     }
 
     /**
-     * @see org.testng.IConfigurationListener#onConfigurationFailure(org.testng.ITestResult)
+     * @see IConfigurationListener#onConfigurationFailure(ITestResult)
      */
     @Override
     public void onConfigurationFailure(ITestResult itr)
@@ -2136,7 +2121,7 @@ public class TestNG
     }
 
     /**
-     * @see org.testng.IConfigurationListener#onConfigurationSkip(org.testng.ITestResult)
+     * @see IConfigurationListener#onConfigurationSkip(ITestResult)
      */
     @Override
     public void onConfigurationSkip(ITestResult itr)
@@ -2145,7 +2130,7 @@ public class TestNG
     }
 
     /**
-     * @see org.testng.IConfigurationListener#onConfigurationSuccess(org.testng.ITestResult)
+     * @see IConfigurationListener#onConfigurationSuccess(ITestResult)
      */
     @Override
     public void onConfigurationSuccess(ITestResult itr)
@@ -2222,7 +2207,7 @@ public class TestNG
   private URLClassLoader m_serviceLoaderClassLoader;
   private List<ITestNGListener> m_serviceLoaderListeners = Lists.newArrayList();
 
-  /*
+  /**
    * Used to test ServiceClassLoader
    */
   public void setServiceLoaderClassLoader(URLClassLoader ucl)
@@ -2230,7 +2215,7 @@ public class TestNG
     m_serviceLoaderClassLoader = ucl;
   }
 
-  /*
+  /**
    * Used to test ServiceClassLoader
    */
   private void addServiceLoaderListener(ITestNGListener l)
@@ -2238,7 +2223,7 @@ public class TestNG
     m_serviceLoaderListeners.add(l);
   }
 
-  /*
+  /**
    * Used to test ServiceClassLoader
    */
   public List<ITestNGListener> getServiceLoaderListeners()

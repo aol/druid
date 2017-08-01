@@ -19,6 +19,8 @@
 
 package io.druid.query.aggregation;
 
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
+
 import java.nio.ByteBuffer;
 
 /**
@@ -50,6 +52,12 @@ public class CountBufferAggregator implements BufferAggregator
     return buf.getLong(position);
   }
 
+  @Override
+  public double getDouble(ByteBuffer buf, int position)
+  {
+    return buf.getLong(position);
+  }
+
 
   @Override
   public long getLong(ByteBuffer buf, int position)
@@ -61,5 +69,11 @@ public class CountBufferAggregator implements BufferAggregator
   public void close()
   {
     // no resources to cleanup
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    // nothing to inspect
   }
 }

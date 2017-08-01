@@ -29,6 +29,7 @@ import io.druid.audit.AuditInfo;
 import io.druid.audit.AuditManager;
 import io.druid.client.DruidServer;
 import io.druid.jackson.DefaultObjectMapper;
+import io.druid.java.util.common.StringUtils;
 import io.druid.server.audit.SQLAuditManager;
 import io.druid.server.audit.SQLAuditManagerConfig;
 import io.druid.server.coordinator.rules.IntervalLoadRule;
@@ -74,8 +75,8 @@ public class SQLMetadataRuleManagerTest
     connector.createRulesTable();
     ruleManager = new SQLMetadataRuleManager(
         mapper,
-        Suppliers.ofInstance(new MetadataRuleManagerConfig()),
-        Suppliers.ofInstance(tablesConfig),
+        new MetadataRuleManagerConfig(),
+        tablesConfig,
         connector,
         auditManager
     );
@@ -201,7 +202,7 @@ public class SQLMetadataRuleManagerTest
           @Override
           public Void withHandle(Handle handle) throws Exception
           {
-            handle.createStatement(String.format("DROP TABLE %s", tableName))
+            handle.createStatement(StringUtils.format("DROP TABLE %s", tableName))
                   .execute();
             return null;
           }

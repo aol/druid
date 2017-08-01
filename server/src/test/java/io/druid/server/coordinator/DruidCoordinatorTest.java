@@ -26,29 +26,30 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.MapMaker;
 import com.google.common.collect.Maps;
-
 import io.druid.client.DruidDataSource;
 import io.druid.client.DruidServer;
 import io.druid.client.ImmutableDruidDataSource;
 import io.druid.client.ImmutableDruidServer;
 import io.druid.client.SingleServerInventoryView;
-import io.druid.collections.CountingMap;
 import io.druid.common.config.JacksonConfigManager;
 import io.druid.concurrent.Execs;
 import io.druid.curator.CuratorTestBase;
 import io.druid.curator.discovery.NoopServiceAnnouncer;
-import io.druid.curator.inventory.InventoryManagerConfig;
 import io.druid.jackson.DefaultObjectMapper;
 import io.druid.java.util.common.concurrent.ScheduledExecutorFactory;
 import io.druid.metadata.MetadataRuleManager;
 import io.druid.metadata.MetadataSegmentManager;
 import io.druid.server.DruidNode;
 import io.druid.server.coordination.DruidServerMetadata;
+import io.druid.server.coordination.ServerType;
 import io.druid.server.coordinator.rules.ForeverLoadRule;
 import io.druid.server.coordinator.rules.Rule;
+import io.druid.server.initialization.ServerConfig;
 import io.druid.server.initialization.ZkPathsConfig;
+import io.druid.server.lookup.cache.LookupCoordinatorManager;
 import io.druid.server.metrics.NoopServiceEmitter;
 import io.druid.timeline.DataSegment;
+import it.unimi.dsi.fastutil.objects.Object2LongMap;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheEvent;
@@ -77,7 +78,6 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DruidCoordinatorTest extends CuratorTestBase
 {
   private DruidCoordinator coordinator;
-  private LoadQueueTaskMaster taskMaster;
   private MetadataSegmentManager databaseSegmentManager;
   private SingleServerInventoryView serverInventoryView;
   private ScheduledExecutorFactory scheduledExecutorFactory;
@@ -101,7 +101,6 @@ public class DruidCoordinatorTest extends CuratorTestBase
   @Before
   public void setUp() throws Exception
   {
-    taskMaster = EasyMock.createMock(LoadQueueTaskMaster.class);
     druidServer = EasyMock.createMock(DruidServer.class);
     serverInventoryView = EasyMock.createMock(SingleServerInventoryView.class);
     databaseSegmentManager = EasyMock.createNiceMock(MetadataSegmentManager.class);
@@ -143,7 +142,7 @@ public class DruidCoordinatorTest extends CuratorTestBase
       druidCoordinatorConfig
     );
     loadQueuePeon.start();
-    druidNode = new DruidNode("hey", "what", 1234);
+    druidNode = new DruidNode("hey", "what", 1234, null, new ServerConfig());
     loadManagementPeons = new MapMaker().makeMap();
     scheduledExecutorFactory = new ScheduledExecutorFactory()
     {
@@ -174,7 +173,7 @@ public class DruidCoordinatorTest extends CuratorTestBase
         new NoopServiceEmitter(),
         scheduledExecutorFactory,
         null,
-        taskMaster,
+        null,
         new NoopServiceAnnouncer(){
           @Override
           public void announce(DruidNode node)
@@ -192,7 +191,8 @@ public class DruidCoordinatorTest extends CuratorTestBase
         druidNode,
         loadManagementPeons,
         null,
-        new CostBalancerStrategyFactory()
+        new CostBalancerStrategyFactory(),
+        EasyMock.createNiceMock(LookupCoordinatorManager.class)
     );
   }
 
@@ -208,16 +208,23 @@ public class DruidCoordinatorTest extends CuratorTestBase
   public void testMoveSegment() throws Exception
   {
     loadQueuePeon = EasyMock.createNiceMock(LoadQueuePeon.class);
-    EasyMock.expect(loadQueuePeon.getLoadQueueSize()).andReturn(new Long(1));
-    EasyMock.replay(loadQueuePeon);
     segment = EasyMock.createNiceMock(DataSegment.class);
+    EasyMock.expect(segment.getIdentifier()).andReturn("dummySegment");
+    EasyMock.expect(segment.getDataSource()).andReturn("dummyDataSource");
     EasyMock.replay(segment);
+    EasyMock.expect(loadQueuePeon.getLoadQueueSize()).andReturn(new Long(1));
+    DruidDataSource druidDataSource= EasyMock.createNiceMock(DruidDataSource.class);
+    EasyMock.expect(druidDataSource.getSegment(EasyMock.anyString())).andReturn(segment);
+    EasyMock.replay(druidDataSource);
+    EasyMock.expect(databaseSegmentManager.getInventoryValue(EasyMock.anyString())).andReturn(druidDataSource);
+    EasyMock.replay(databaseSegmentManager);
+    EasyMock.replay(loadQueuePeon);
     scheduledExecutorFactory = EasyMock.createNiceMock(ScheduledExecutorFactory.class);
     EasyMock.replay(scheduledExecutorFactory);
     EasyMock.replay(metadataRuleManager);
     EasyMock.expect(druidServer.toImmutableDruidServer()).andReturn(
         new ImmutableDruidServer(
-            new DruidServerMetadata("from", null, 5L, null, null, 0),
+            new DruidServerMetadata("from", null, null, 5L, ServerType.HISTORICAL, null, 0),
             1L,
             null,
             ImmutableMap.of("dummySegment", segment)
@@ -228,7 +235,7 @@ public class DruidCoordinatorTest extends CuratorTestBase
     druidServer2 = EasyMock.createMock(DruidServer.class);
     EasyMock.expect(druidServer2.toImmutableDruidServer()).andReturn(
         new ImmutableDruidServer(
-            new DruidServerMetadata("to", null, 5L, null, null, 0),
+            new DruidServerMetadata("to", null, null, 5L, ServerType.HISTORICAL, null, 0),
             1L,
             null,
             ImmutableMap.of("dummySegment2", segment)
@@ -239,28 +246,12 @@ public class DruidCoordinatorTest extends CuratorTestBase
     loadManagementPeons.put("from", loadQueuePeon);
     loadManagementPeons.put("to", loadQueuePeon);
 
-    EasyMock.expect(serverInventoryView.getInventoryManagerConfig()).andReturn(
-        new InventoryManagerConfig()
-        {
-          @Override
-          public String getContainerPath()
-          {
-            return "";
-          }
-
-          @Override
-          public String getInventoryPath()
-          {
-            return "";
-          }
-        }
-    );
     EasyMock.replay(serverInventoryView);
 
     coordinator.moveSegment(
         druidServer.toImmutableDruidServer(),
         druidServer2.toImmutableDruidServer(),
-        "dummySegment", null
+        segment, null
     );
     EasyMock.verify(druidServer);
     EasyMock.verify(druidServer2);
@@ -270,7 +261,8 @@ public class DruidCoordinatorTest extends CuratorTestBase
   }
 
   @Test(timeout = 60_000L)
-  public void testCoordinatorRun() throws Exception{
+  public void testCoordinatorRun() throws Exception
+  {
     String dataSource = "dataSource1";
     String tier= "hot";
 
@@ -302,7 +294,7 @@ public class DruidCoordinatorTest extends CuratorTestBase
     EasyMock.replay(immutableDruidDataSource);
 
     // Setup ServerInventoryView
-    druidServer = new DruidServer("server1", "localhost", 5L, "historical", tier, 0);
+    druidServer = new DruidServer("server1", "localhost", null, 5L, ServerType.HISTORICAL, tier, 0);
     loadManagementPeons.put("server1", loadQueuePeon);
     EasyMock.expect(serverInventoryView.getInventory()).andReturn(
         ImmutableList.of(druidServer)
@@ -328,10 +320,14 @@ public class DruidCoordinatorTest extends CuratorTestBase
         ) throws Exception
         {
           if(pathChildrenCacheEvent.getType().equals(PathChildrenCacheEvent.Type.CHILD_ADDED)){
-            //Coordinator should try to assign segment to druidServer historical
-            //Simulate historical loading segment
-            druidServer.addDataSegment(dataSegment.getIdentifier(), dataSegment);
-            assignSegmentLatch.countDown();
+            if (assignSegmentLatch.getCount() > 0) {
+              //Coordinator should try to assign segment to druidServer historical
+              //Simulate historical loading segment
+              druidServer.addDataSegment(dataSegment.getIdentifier(), dataSegment);
+              assignSegmentLatch.countDown();
+            } else {
+              Assert.fail("The same segment is assigned to the same server multiple times");
+            }
           }
         }
       }
@@ -343,14 +339,14 @@ public class DruidCoordinatorTest extends CuratorTestBase
     Assert.assertEquals(ImmutableMap.of(dataSource, 100.0), coordinator.getLoadStatus());
     curator.delete().guaranteed().forPath(ZKPaths.makePath(LOADPATH, dataSegment.getIdentifier()));
     // Wait for coordinator thread to run so that replication status is updated
-    while (coordinator.getSegmentAvailability().snapshot().get(dataSource) != 0) {
+    while (coordinator.getSegmentAvailability().getLong(dataSource) != 0) {
       Thread.sleep(50);
     }
-    Map segmentAvailability = coordinator.getSegmentAvailability().snapshot();
+    Map segmentAvailability = coordinator.getSegmentAvailability();
     Assert.assertEquals(1, segmentAvailability.size());
     Assert.assertEquals(0L, segmentAvailability.get(dataSource));
 
-    while (coordinator.getLoadPendingDatasources().get(dataSource).get() > 0) {
+    while (coordinator.hasLoadPending(dataSource)) {
       Thread.sleep(50);
     }
 
@@ -361,19 +357,17 @@ public class DruidCoordinatorTest extends CuratorTestBase
       Thread.sleep(100);
     }
 
-    Map<String, CountingMap<String>> replicationStatus = coordinator.getReplicationStatus();
+    Map<String, ? extends Object2LongMap<String>> replicationStatus = coordinator.getReplicationStatus();
     Assert.assertNotNull(replicationStatus);
     Assert.assertEquals(1, replicationStatus.entrySet().size());
 
-    CountingMap<String> dataSourceMap = replicationStatus.get(tier);
+    Object2LongMap<String> dataSourceMap = replicationStatus.get(tier);
     Assert.assertNotNull(dataSourceMap);
     Assert.assertEquals(1, dataSourceMap.size());
     Assert.assertNotNull(dataSourceMap.get(dataSource));
     // Simulated the adding of segment to druidServer during SegmentChangeRequestLoad event
     // The load rules asks for 2 replicas, therefore 1 replica should still be pending
-    while(dataSourceMap.get(dataSource).get() != 1L) {
-      Thread.sleep(50);
-    }
+    Assert.assertEquals(1L, dataSourceMap.getLong(dataSource));
 
     coordinator.stop();
     leaderUnannouncerLatch.await();

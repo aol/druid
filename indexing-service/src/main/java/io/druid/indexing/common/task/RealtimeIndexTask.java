@@ -37,6 +37,7 @@ import io.druid.indexing.common.TaskToolbox;
 import io.druid.indexing.common.actions.LockAcquireAction;
 import io.druid.indexing.common.actions.LockReleaseAction;
 import io.druid.indexing.common.actions.TaskActionClient;
+import io.druid.java.util.common.StringUtils;
 import io.druid.java.util.common.guava.CloseQuietly;
 import io.druid.query.DruidMetrics;
 import io.druid.query.FinalizeResultsQueryRunner;
@@ -63,6 +64,7 @@ import io.druid.segment.realtime.plumber.RealtimePlumberSchool;
 import io.druid.segment.realtime.plumber.VersioningPolicy;
 import io.druid.server.coordination.DataSegmentAnnouncer;
 import io.druid.timeline.DataSegment;
+import org.apache.commons.io.FileUtils;
 import org.joda.time.DateTime;
 import org.joda.time.Interval;
 
@@ -70,6 +72,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Random;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.CountDownLatch;
 
 public class RealtimeIndexTask extends AbstractTask
@@ -93,7 +97,7 @@ public class RealtimeIndexTask extends AbstractTask
     for (int i = 0; i < Ints.BYTES * 2; ++i) {
       suffix.append((char) ('a' + ((randomBits >>> (i * 4)) & 0x0F)));
     }
-    return String.format(
+    return StringUtils.format(
         "index_realtime_%s_%d_%s_%s",
         dataSource,
         partitionNumber,
@@ -141,7 +145,7 @@ public class RealtimeIndexTask extends AbstractTask
   {
     super(
         id == null ? makeTaskId(fireDepartment) : id,
-        String.format("index_realtime_%s", makeDatasource(fireDepartment)),
+        StringUtils.format("index_realtime_%s", makeDatasource(fireDepartment)),
         taskResource,
         makeDatasource(fireDepartment),
         context
@@ -188,6 +192,8 @@ public class RealtimeIndexTask extends AbstractTask
     if (this.plumber != null) {
       throw new IllegalStateException("WTF?!? run with non-null plumber??!");
     }
+
+    setupTimeoutAlert();
 
     boolean normalExit = true;
 
@@ -244,12 +250,6 @@ public class RealtimeIndexTask extends AbstractTask
           }
         }
       }
-
-      @Override
-      public boolean isAnnounced(DataSegment segment)
-      {
-        return toolbox.getSegmentAnnouncer().isAnnounced(segment);
-      }
     };
 
     // NOTE: getVersion will block if there is lock contention, which will block plumber.getSink
@@ -279,7 +279,7 @@ public class RealtimeIndexTask extends AbstractTask
     DataSchema dataSchema = spec.getDataSchema();
     RealtimeIOConfig realtimeIOConfig = spec.getIOConfig();
     RealtimeTuningConfig tuningConfig = spec.getTuningConfig()
-                                            .withBasePersistDirectory(new File(toolbox.getTaskWorkDir(), "persist"))
+                                            .withBasePersistDirectory(toolbox.getPersistDir())
                                             .withVersioningPolicy(versioningPolicy);
 
     final FireDepartment fireDepartment = new FireDepartment(
@@ -309,7 +309,6 @@ public class RealtimeIndexTask extends AbstractTask
         segmentPublisher,
         toolbox.getSegmentHandoffNotifierFactory(),
         toolbox.getQueryExecutorService(),
-        toolbox.getIndexMerger(),
         toolbox.getIndexMergerV9(),
         toolbox.getIndexIO(),
         toolbox.getCache(),
@@ -320,12 +319,18 @@ public class RealtimeIndexTask extends AbstractTask
     this.plumber = plumberSchool.findPlumber(dataSchema, tuningConfig, metrics);
 
     Supplier<Committer> committerSupplier = null;
+    final File firehoseTempDir = toolbox.getFirehoseTemporaryDir();
 
     try {
+      toolbox.getDataSegmentServerAnnouncer().announce();
+
       plumber.startJob();
 
       // Set up metrics emission
       toolbox.getMonitorScheduler().addMonitor(metricsMonitor);
+
+      // Firehose temporary directory is automatically removed when this RealtimeIndexTask completes.
+      FileUtils.forceMkdir(firehoseTempDir);
 
       // Delay firehose connection to avoid claiming input resources while the plumber is starting up.
       final FirehoseFactory firehoseFactory = spec.getIOConfig().getFirehoseFactory();
@@ -334,7 +339,7 @@ public class RealtimeIndexTask extends AbstractTask
       // Skip connecting firehose if we've been stopped before we got started.
       synchronized (this) {
         if (!gracefullyStopped) {
-          firehose = firehoseFactory.connect(spec.getDataSchema().getParser());
+          firehose = firehoseFactory.connect(spec.getDataSchema().getParser(), firehoseTempDir);
           committerSupplier = Committers.supplierFromFirehose(firehose);
         }
       }
@@ -421,6 +426,8 @@ public class RealtimeIndexTask extends AbstractTask
           toolbox.getMonitorScheduler().removeMonitor(metricsMonitor);
         }
       }
+
+      toolbox.getDataSegmentServerAnnouncer().unannounce();
     }
 
     log.info("Job done!");
@@ -516,6 +523,28 @@ public class RealtimeIndexTask extends AbstractTask
     public void publishSegment(DataSegment segment) throws IOException
     {
       taskToolbox.publishSegments(ImmutableList.of(segment));
+    }
+  }
+
+  private void setupTimeoutAlert()
+  {
+    if (spec.getTuningConfig().getAlertTimeout() > 0) {
+      Timer timer = new Timer("RealtimeIndexTask-Timer", true);
+      timer.schedule(
+          new TimerTask()
+          {
+            @Override
+            public void run()
+            {
+              log.makeAlert(
+                  "RealtimeIndexTask for dataSource [%s] hasn't finished in configured time [%d] ms.",
+                  spec.getDataSchema().getDataSource(),
+                  spec.getTuningConfig().getAlertTimeout()
+              ).emit();
+            }
+          },
+          spec.getTuningConfig().getAlertTimeout()
+      );
     }
   }
 }

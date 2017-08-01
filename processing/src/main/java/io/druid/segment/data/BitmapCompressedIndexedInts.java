@@ -21,6 +21,7 @@ package io.druid.segment.data;
 
 import com.google.common.collect.Ordering;
 import io.druid.collections.bitmap.ImmutableBitmap;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.IntIteratorUtils;
 import it.unimi.dsi.fastutil.ints.IntIterator;
 
@@ -31,7 +32,7 @@ import java.io.IOException;
  */
 public class BitmapCompressedIndexedInts implements IndexedInts, Comparable<ImmutableBitmap>
 {
-  private static Ordering<ImmutableBitmap> comparator = new Ordering<ImmutableBitmap>()
+  private static final Ordering<ImmutableBitmap> COMPARATOR = new Ordering<ImmutableBitmap>()
   {
     @Override
     public int compare(
@@ -61,7 +62,7 @@ public class BitmapCompressedIndexedInts implements IndexedInts, Comparable<Immu
   @Override
   public int compareTo(@Nullable ImmutableBitmap otherBitmap)
   {
-    return comparator.compare(immutableBitmap, otherBitmap);
+    return COMPARATOR.compare(immutableBitmap, otherBitmap);
   }
 
   @Override
@@ -96,6 +97,11 @@ public class BitmapCompressedIndexedInts implements IndexedInts, Comparable<Immu
   @Override
   public void close() throws IOException
   {
+  }
 
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    inspector.visit("immutableBitmap", immutableBitmap);
   }
 }

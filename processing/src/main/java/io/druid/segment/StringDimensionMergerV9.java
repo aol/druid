@@ -23,7 +23,6 @@ import com.google.common.base.Splitter;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
-import com.google.common.io.Closer;
 import com.google.common.io.Files;
 import io.druid.collections.bitmap.BitmapFactory;
 import io.druid.collections.bitmap.ImmutableBitmap;
@@ -33,10 +32,13 @@ import io.druid.collections.spatial.RTree;
 import io.druid.collections.spatial.split.LinearGutmanSplitStrategy;
 import io.druid.java.util.common.ByteBufferUtils;
 import io.druid.java.util.common.ISE;
+import io.druid.java.util.common.StringUtils;
+import io.druid.java.util.common.io.Closer;
 import io.druid.java.util.common.logger.Logger;
 import io.druid.segment.column.ColumnCapabilities;
 import io.druid.segment.column.ColumnDescriptor;
 import io.druid.segment.column.ValueType;
+import io.druid.segment.data.ArrayIndexed;
 import io.druid.segment.data.BitmapSerdeFactory;
 import io.druid.segment.data.ByteBufferWriter;
 import io.druid.segment.data.CompressedObjectStrategy;
@@ -49,7 +51,6 @@ import io.druid.segment.data.Indexed;
 import io.druid.segment.data.IndexedInts;
 import io.druid.segment.data.IndexedIntsWriter;
 import io.druid.segment.data.IndexedRTree;
-import io.druid.segment.data.ListIndexed;
 import io.druid.segment.data.VSizeIndexedIntsWriter;
 import io.druid.segment.data.VSizeIndexedWriter;
 import io.druid.segment.serde.DictionaryEncodedColumnPartSerde;
@@ -64,14 +65,13 @@ import java.io.IOException;
 import java.nio.IntBuffer;
 import java.nio.MappedByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
 {
   private static final Logger log = new Logger(StringDimensionMergerV9.class);
 
-  protected static final ListIndexed EMPTY_STR_DIM_VAL = new ListIndexed<>(Arrays.asList(""), String.class);
+  protected static final Indexed<String> EMPTY_STR_DIM_VAL = new ArrayIndexed<>(new String[]{""}, String.class);
   protected static final int[] EMPTY_STR_DIM_ARRAY = new int[]{0};
   protected static final Splitter SPLITTER = Splitter.on(",");
 
@@ -157,7 +157,7 @@ public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
       numMergeIndex++;
     }
 
-    String dictFilename = String.format("%s.dim_values", dimensionName);
+    String dictFilename = StringUtils.format("%s.dim_values", dimensionName);
     dictionaryWriter = new GenericIndexedWriter<>(
         ioPeon,
         dictFilename,
@@ -201,7 +201,7 @@ public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
   {
     final CompressedObjectStrategy.CompressionStrategy compressionStrategy = indexSpec.getDimensionCompression();
 
-    String filenameBase = String.format("%s.forward_dim", dimensionName);
+    String filenameBase = StringUtils.format("%s.forward_dim", dimensionName);
     if (capabilities.hasMultipleValues()) {
       encodedValueWriter = (compressionStrategy != CompressedObjectStrategy.CompressionStrategy.UNCOMPRESSED)
                            ? CompressedVSizeIndexedV3Writer.create(
@@ -276,7 +276,7 @@ public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
     long dimStartTime = System.currentTimeMillis();
     final BitmapSerdeFactory bitmapSerdeFactory = indexSpec.getBitmapSerdeFactory();
 
-    String bmpFilename = String.format("%s.inverted", dimensionName);
+    String bmpFilename = StringUtils.format("%s.inverted", dimensionName);
     bitmapWriter = new GenericIndexedWriter<>(
         ioPeon,
         bmpFilename,
@@ -310,7 +310,7 @@ public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
       if (hasSpatial) {
         spatialWriter = new ByteBufferWriter<>(
             ioPeon,
-            String.format("%s.spatial", dimensionName),
+            StringUtils.format("%s.spatial", dimensionName),
             new IndexedRTree.ImmutableRTreeObjectStrategy(bmpFactory)
         );
         spatialWriter.open();
@@ -462,7 +462,7 @@ public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
     int seek(int dictId);
   }
 
-  protected class IndexSeekerWithoutConversion implements IndexSeeker
+  protected static class IndexSeekerWithoutConversion implements IndexSeeker
   {
     private final int limit;
 
@@ -481,7 +481,7 @@ public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
   /**
    * Get old dictId from new dictId, and only support access in order
    */
-  protected class IndexSeekerWithConversion implements IndexSeeker
+  protected static class IndexSeekerWithConversion implements IndexSeeker
   {
     private final IntBuffer dimConversions;
     private int currIndex;
@@ -496,6 +496,7 @@ public class StringDimensionMergerV9 implements DimensionMergerV9<int[]>
       this.lastVal = NOT_INIT;
     }
 
+    @Override
     public int seek(int dictId)
     {
       if (dimConversions == null) {

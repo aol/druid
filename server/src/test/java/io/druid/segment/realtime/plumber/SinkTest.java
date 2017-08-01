@@ -70,6 +70,7 @@ public class SinkTest
         0,
         0,
         null,
+        null,
         null
     );
     final Sink sink = new Sink(
@@ -118,6 +119,12 @@ public class SinkTest
           public long getLongMetric(String metric)
           {
             return 0L;
+          }
+
+          @Override
+          public double getDoubleMetric(String metric)
+          {
+            return 0.0d;
           }
 
           @Override
@@ -177,6 +184,12 @@ public class SinkTest
           public long getLongMetric(String metric)
           {
             return 0L;
+          }
+
+          @Override
+          public double getDoubleMetric(String metric)
+          {
+            return 0.0d;
           }
 
           @Override

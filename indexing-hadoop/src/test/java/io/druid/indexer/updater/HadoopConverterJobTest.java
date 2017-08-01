@@ -164,14 +164,16 @@ public class HadoopConverterJobTest
                             new DimensionsSpec(DimensionsSpec.getDefaultSchemas(Arrays.asList(TestIndex.DIMENSIONS)), null, null),
                             "\t",
                             "\u0001",
-                            Arrays.asList(TestIndex.COLUMNS)
+                            Arrays.asList(TestIndex.COLUMNS),
+                            false,
+                            0
                         ),
                         null
                     ),
                     Map.class
                 ),
                 new AggregatorFactory[]{
-                    new DoubleSumAggregatorFactory(TestIndex.METRICS[0], TestIndex.METRICS[0]),
+                    new DoubleSumAggregatorFactory(TestIndex.DOUBLE_METRICS[0], TestIndex.DOUBLE_METRICS[0]),
                     new HyperUniquesAggregatorFactory("quality_uniques", "quality")
                 },
                 new UniformGranularitySpec(
@@ -207,7 +209,8 @@ public class HadoopConverterJobTest
                 null,
                 null,
                 false,
-                false
+                false,
+                null
             )
         )
     );

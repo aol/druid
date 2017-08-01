@@ -107,8 +107,7 @@ public class CombiningSequence<T> implements Sequence<T>
         } else {
           finalYielder = Yielders.done(null, yielder);
         }
-      }
-      else {
+      } else {
         return Yielders.done(combiningAccumulator.getRetVal(), yielder);
       }
     }
@@ -183,16 +182,19 @@ public class CombiningSequence<T> implements Sequence<T>
       return accumulator;
     }
 
+    @Override
     public void reset()
     {
       accumulator.reset();
     }
 
+    @Override
     public boolean yielded()
     {
       return accumulator.yielded();
     }
 
+    @Override
     public void yield()
     {
       accumulator.yield();

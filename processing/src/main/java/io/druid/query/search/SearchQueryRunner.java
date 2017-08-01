@@ -30,6 +30,7 @@ import io.druid.java.util.common.guava.FunctionalIterable;
 import io.druid.java.util.common.guava.Sequence;
 import io.druid.java.util.common.guava.Sequences;
 import io.druid.query.Query;
+import io.druid.query.QueryPlus;
 import io.druid.query.QueryRunner;
 import io.druid.query.Result;
 import io.druid.query.dimension.ColumnSelectorStrategy;
@@ -40,6 +41,7 @@ import io.druid.query.search.search.SearchQueryExecutor;
 import io.druid.query.search.search.SearchQuerySpec;
 import io.druid.segment.ColumnValueSelector;
 import io.druid.segment.DimensionSelector;
+import io.druid.segment.DoubleColumnSelector;
 import io.druid.segment.FloatColumnSelector;
 import io.druid.segment.LongColumnSelector;
 import io.druid.segment.NullDimensionSelector;
@@ -85,6 +87,8 @@ public class SearchQueryRunner implements QueryRunner<Result<SearchResultValue>>
           return new LongSearchColumnSelectorStrategy();
         case FLOAT:
           return new FloatSearchColumnSelectorStrategy();
+        case DOUBLE:
+          return new DoubleSearchColumnSelectorStrategy();
         default:
           throw new IAE("Cannot create query type helper from invalid type [%s]", type);
       }
@@ -182,14 +186,34 @@ public class SearchQueryRunner implements QueryRunner<Result<SearchResultValue>>
       }
     }
   }
-  
+
+  public static class DoubleSearchColumnSelectorStrategy implements SearchColumnSelectorStrategy<DoubleColumnSelector>
+  {
+    @Override
+    public void updateSearchResultSet(
+        String outputName,
+        DoubleColumnSelector selector,
+        SearchQuerySpec searchQuerySpec,
+        int limit,
+        Object2IntRBTreeMap<SearchHit> set
+    )
+    {
+      if (selector != null) {
+        final String dimVal = String.valueOf(selector.get());
+        if (searchQuerySpec.accept(dimVal)) {
+          set.addTo(new SearchHit(outputName, dimVal), 1);
+        }
+      }
+    }
+  }
 
   @Override
   public Sequence<Result<SearchResultValue>> run(
-      final Query<Result<SearchResultValue>> input,
+      final QueryPlus<Result<SearchResultValue>> queryPlus,
       Map<String, Object> responseContext
   )
   {
+    Query<Result<SearchResultValue>> input = queryPlus.getQuery();
     if (!(input instanceof SearchQuery)) {
       throw new ISE("Got a [%s] which isn't a %s", input.getClass(), SearchQuery.class);
     }

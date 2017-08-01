@@ -22,7 +22,10 @@ package io.druid.sql.calcite.planner;
 import com.google.common.collect.Maps;
 import com.google.inject.Inject;
 import io.druid.java.util.common.ISE;
+import io.druid.java.util.common.StringUtils;
 import io.druid.sql.calcite.aggregation.SqlAggregator;
+import io.druid.sql.calcite.expression.SqlOperatorConversion;
+import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunctionCategory;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlOperator;
@@ -40,24 +43,50 @@ public class DruidOperatorTable implements SqlOperatorTable
   private static final SqlStdOperatorTable STANDARD_TABLE = SqlStdOperatorTable.instance();
 
   private final Map<String, SqlAggregator> aggregators;
+  private final Map<String, SqlOperatorConversion> extractionOperators;
 
   @Inject
   public DruidOperatorTable(
-      final Set<SqlAggregator> aggregators
+      final Set<SqlAggregator> aggregators,
+      final Set<SqlOperatorConversion> extractionOperators
   )
   {
     this.aggregators = Maps.newHashMap();
+    this.extractionOperators = Maps.newHashMap();
+
     for (SqlAggregator aggregator : aggregators) {
-      final String lcname = aggregator.calciteFunction().getName().toLowerCase();
+      final String lcname = StringUtils.toLowerCase(aggregator.calciteFunction().getName());
       if (this.aggregators.put(lcname, aggregator) != null) {
-        throw new ISE("Cannot have two aggregators with name[%s]", lcname);
+        throw new ISE("Cannot have two operators with name[%s]", lcname);
+      }
+    }
+
+    for (SqlOperatorConversion extractionFunction : extractionOperators) {
+      final String lcname = StringUtils.toLowerCase(extractionFunction.calciteOperator().getName());
+      if (this.aggregators.containsKey(lcname) || this.extractionOperators.put(lcname, extractionFunction) != null) {
+        throw new ISE("Cannot have two operators with name[%s]", lcname);
       }
     }
   }
 
-  public SqlAggregator lookupAggregator(final String opName)
+  public SqlAggregator lookupAggregator(final SqlAggFunction aggFunction)
   {
-    return aggregators.get(opName.toLowerCase());
+    final SqlAggregator sqlAggregator = aggregators.get(StringUtils.toLowerCase(aggFunction.getName()));
+    if (sqlAggregator != null && sqlAggregator.calciteFunction().equals(aggFunction)) {
+      return sqlAggregator;
+    } else {
+      return null;
+    }
+  }
+
+  public SqlOperatorConversion lookupOperatorConversion(final SqlOperator operator)
+  {
+    final SqlOperatorConversion operatorConversion = extractionOperators.get(StringUtils.toLowerCase(operator.getName()));
+    if (operatorConversion != null && operatorConversion.calciteOperator().equals(operator)) {
+      return operatorConversion;
+    } else {
+      return null;
+    }
   }
 
   @Override
@@ -68,12 +97,18 @@ public class DruidOperatorTable implements SqlOperatorTable
       final List<SqlOperator> operatorList
   )
   {
-    if (opName.names.size() == 1) {
-      final SqlAggregator aggregator = aggregators.get(opName.getSimple().toLowerCase());
-      if (aggregator != null && syntax == SqlSyntax.FUNCTION) {
+    if (opName.names.size() == 1 && syntax == SqlSyntax.FUNCTION) {
+      final SqlAggregator aggregator = aggregators.get(StringUtils.toLowerCase(opName.getSimple()));
+      if (aggregator != null) {
         operatorList.add(aggregator.calciteFunction());
       }
+
+      final SqlOperatorConversion extractionFunction = extractionOperators.get(StringUtils.toLowerCase(opName.getSimple()));
+      if (extractionFunction != null) {
+        operatorList.add(extractionFunction.calciteOperator());
+      }
     }
+
     STANDARD_TABLE.lookupOperatorOverloads(opName, category, syntax, operatorList);
   }
 
@@ -83,6 +118,9 @@ public class DruidOperatorTable implements SqlOperatorTable
     final List<SqlOperator> retVal = new ArrayList<>();
     for (SqlAggregator aggregator : aggregators.values()) {
       retVal.add(aggregator.calciteFunction());
+    }
+    for (SqlOperatorConversion extractionFunction : extractionOperators.values()) {
+      retVal.add(extractionFunction.calciteOperator());
     }
     retVal.addAll(STANDARD_TABLE.getOperatorList());
     return retVal;

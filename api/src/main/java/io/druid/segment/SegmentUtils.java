@@ -21,6 +21,7 @@ package io.druid.segment;
 
 import com.google.common.io.Files;
 import com.google.common.primitives.Ints;
+import io.druid.java.util.common.IOE;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -40,9 +41,13 @@ public class SegmentUtils
 
     final File indexFile = new File(inDir, "index.drd");
     int version;
-    try (InputStream in = new FileInputStream(indexFile)) {
-      version = in.read();
+    if (indexFile.exists()) {
+      try (InputStream in = new FileInputStream(indexFile)) {
+        version = in.read();
+      }
+      return version;
     }
-    return version;
+
+    throw new IOE("Invalid segment dir [%s]. Can't find either of version.bin or index.drd.", inDir);
   }
 }

@@ -24,7 +24,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.metamx.emitter.core.NoopEmitter;
 import com.metamx.emitter.service.ServiceEmitter;
@@ -38,6 +37,7 @@ import io.druid.js.JavaScriptConfig;
 import io.druid.query.aggregation.AggregatorFactory;
 import io.druid.query.aggregation.CountAggregatorFactory;
 import io.druid.query.aggregation.DoubleSumAggregatorFactory;
+import io.druid.query.aggregation.FloatSumAggregatorFactory;
 import io.druid.query.aggregation.JavaScriptAggregatorFactory;
 import io.druid.query.aggregation.LongSumAggregatorFactory;
 import io.druid.query.aggregation.cardinality.CardinalityAggregatorFactory;
@@ -73,6 +73,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -81,14 +82,7 @@ import java.util.Map;
 public class QueryRunnerTestHelper
 {
 
-  public static final QueryWatcher NOOP_QUERYWATCHER = new QueryWatcher()
-  {
-    @Override
-    public void registerQuery(Query query, ListenableFuture future)
-    {
-
-    }
-  };
+  public static final QueryWatcher NOOP_QUERYWATCHER = (query, future) -> {};
 
   public static final String segmentId = "testSegment";
   public static final String dataSource = "testing";
@@ -105,8 +99,6 @@ public class QueryRunnerTestHelper
           }
       )
   );
-
-  public static final DateTime minTime = new DateTime("2011-01-12T00:00:00.000Z");
 
   public static final Granularity dayGran = Granularities.DAY;
   public static final Granularity allGran = Granularities.ALL;
@@ -127,8 +119,6 @@ public class QueryRunnerTestHelper
   public static final String indexMetric = "index";
   public static final String uniqueMetric = "uniques";
   public static final String addRowsIndexConstantMetric = "addRowsIndexConstant";
-  public static final List<String> metrics = Lists.newArrayList(indexMetric, uniqueMetric, addRowsIndexConstantMetric);
-
   public static String dependentPostAggMetric = "dependentPostAgg";
   public static final CountAggregatorFactory rowsCount = new CountAggregatorFactory("rows");
   public static final LongSumAggregatorFactory indexLongSum = new LongSumAggregatorFactory("index", indexMetric);
@@ -199,10 +189,19 @@ public class QueryRunnerTestHelper
       )
   );
 
-  public static final List<AggregatorFactory> commonAggregators = Arrays.asList(
+  public static final List<AggregatorFactory> commonDoubleAggregators = Arrays.asList(
       rowsCount,
       indexDoubleSum,
       qualityUniques
+  );
+
+  public final static List<AggregatorFactory> commonFloatAggregators = Arrays.asList(
+      new FloatSumAggregatorFactory("index", "indexFloat"),
+      new CountAggregatorFactory("rows"),
+      new HyperUniquesAggregatorFactory(
+          "uniques",
+          "quality_uniques"
+      )
   );
 
   public static final double UNIQUES_9 = 9.019833517963864;
@@ -501,9 +500,9 @@ public class QueryRunnerTestHelper
     return new QueryRunner<T>()
     {
       @Override
-      public Sequence<T> run(Query<T> query, Map<String, Object> responseContext)
+      public Sequence<T> run(QueryPlus<T> queryPlus, Map<String, Object> responseContext)
       {
-        return qr.run(query, responseContext);
+        return qr.run(queryPlus, responseContext);
       }
 
       @Override
@@ -526,8 +525,9 @@ public class QueryRunnerTestHelper
             new QueryRunner<T>()
             {
               @Override
-              public Sequence<T> run(Query<T> query, Map<String, Object> responseContext)
+              public Sequence<T> run(QueryPlus<T> queryPlus, Map<String, Object> responseContext)
               {
+                Query<T> query = queryPlus.getQuery();
                 List<TimelineObjectHolder> segments = Lists.newArrayList();
                 for (Interval interval : query.getIntervals()) {
                   segments.addAll(timeline.lookup(interval));
@@ -535,7 +535,7 @@ public class QueryRunnerTestHelper
                 List<Sequence<T>> sequences = Lists.newArrayList();
                 for (TimelineObjectHolder<String, Segment> holder : toolChest.filterSegments(query, segments)) {
                   Segment segment = holder.getObject().getChunk(0).getObject();
-                  Query running = query.withQuerySegmentSpec(
+                  QueryPlus queryPlusRunning = queryPlus.withQuerySegmentSpec(
                       new SpecificSegmentSpec(
                           new SegmentDescriptor(
                               holder.getInterval(),
@@ -544,7 +544,7 @@ public class QueryRunnerTestHelper
                           )
                       )
                   );
-                  sequences.add(factory.createRunner(segment).run(running, responseContext));
+                  sequences.add(factory.createRunner(segment).run(queryPlusRunning, responseContext));
                 }
                 return new MergeSequence<>(query.getResultOrdering(), Sequences.simple(sequences));
               }
@@ -568,9 +568,9 @@ public class QueryRunnerTestHelper
         return new QueryRunner<T>()
         {
           @Override
-          public Sequence<T> run(Query<T> query, Map<String, Object> responseContext)
+          public Sequence<T> run(QueryPlus<T> queryPlus, Map<String, Object> responseContext)
           {
-            return delegate.run(query, responseContext);
+            return delegate.run(queryPlus, responseContext);
           }
         };
       }
@@ -611,5 +611,14 @@ public class QueryRunnerTestHelper
         new TimeseriesQueryEngine(),
         QueryRunnerTestHelper.NOOP_QUERYWATCHER
     );
+  }
+
+  public static Map<String, Object> orderedMap(Object... keyValues)
+  {
+    LinkedHashMap<String, Object> map = new LinkedHashMap<>();
+    for (int i = 0; i < keyValues.length; i += 2) {
+      map.put(keyValues[i].toString(), keyValues[i + 1]);
+    }
+    return map;
   }
 }

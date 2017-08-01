@@ -19,9 +19,9 @@
 
 package io.druid.query.aggregation.last;
 
-import com.google.common.primitives.Longs;
 import io.druid.collections.SerializablePair;
 import io.druid.query.aggregation.BufferAggregator;
+import io.druid.query.monomorphicprocessing.RuntimeShapeInspector;
 import io.druid.segment.LongColumnSelector;
 
 import java.nio.ByteBuffer;
@@ -41,7 +41,7 @@ public class LongLastBufferAggregator implements BufferAggregator
   public void init(ByteBuffer buf, int position)
   {
     buf.putLong(position, Long.MIN_VALUE);
-    buf.putLong(position + Longs.BYTES, 0);
+    buf.putLong(position + Long.BYTES, 0);
   }
 
   @Override
@@ -51,31 +51,44 @@ public class LongLastBufferAggregator implements BufferAggregator
     long lastTime = buf.getLong(position);
     if (time >= lastTime) {
       buf.putLong(position, time);
-      buf.putLong(position + Longs.BYTES, valueSelector.get());
+      buf.putLong(position + Long.BYTES, valueSelector.get());
     }
   }
 
   @Override
   public Object get(ByteBuffer buf, int position)
   {
-    return new SerializablePair<>(buf.getLong(position), buf.getLong(position + Longs.BYTES));
+    return new SerializablePair<>(buf.getLong(position), buf.getLong(position + Long.BYTES));
   }
 
   @Override
   public float getFloat(ByteBuffer buf, int position)
   {
-    return (float) buf.getLong(position + Longs.BYTES);
+    return (float) buf.getLong(position + Long.BYTES);
+  }
+
+  @Override
+  public double getDouble(ByteBuffer buf, int position)
+  {
+    return buf.getLong(position + Long.BYTES);
   }
 
   @Override
   public long getLong(ByteBuffer buf, int position)
   {
-    return buf.getLong(position + Longs.BYTES);
+    return buf.getLong(position + Long.BYTES);
   }
 
   @Override
   public void close()
   {
     // no resources to cleanup
+  }
+
+  @Override
+  public void inspectRuntimeShape(RuntimeShapeInspector inspector)
+  {
+    inspector.visit("timeSelector", timeSelector);
+    inspector.visit("valueSelector", valueSelector);
   }
 }

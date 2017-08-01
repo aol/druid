@@ -143,8 +143,12 @@ public class SegmentMetadataQueryTest
   {
     final String id1 = differentIds ? "testSegment1" : "testSegment";
     final String id2 = differentIds ? "testSegment2" : "testSegment";
-    this.runner1 = mmap1 ? makeMMappedQueryRunner(id1, rollup1, FACTORY) : makeIncrementalIndexQueryRunner(id1, rollup1, FACTORY);
-    this.runner2 = mmap2 ? makeMMappedQueryRunner(id2, rollup2, FACTORY) : makeIncrementalIndexQueryRunner(id2, rollup2, FACTORY);
+    this.runner1 = mmap1
+                   ? makeMMappedQueryRunner(id1, rollup1, FACTORY)
+                   : makeIncrementalIndexQueryRunner(id1, rollup1, FACTORY);
+    this.runner2 = mmap2
+                   ? makeMMappedQueryRunner(id2, rollup2, FACTORY)
+                   : makeIncrementalIndexQueryRunner(id2, rollup2, FACTORY);
     this.mmap1 = mmap1;
     this.mmap2 = mmap2;
     this.rollup1 = rollup1;
@@ -191,7 +195,7 @@ public class SegmentMetadataQueryTest
             ),
             "index",
             new ColumnAnalysis(
-                ValueType.FLOAT.toString(),
+                ValueType.DOUBLE.toString(),
                 false,
                 9672,
                 null,
@@ -199,7 +203,7 @@ public class SegmentMetadataQueryTest
                 null,
                 null
             )
-        ), mmap1 ? 123969 : 124664,
+        ), mmap1 ? 167493 : 168188,
         1209,
         null,
         null,
@@ -234,7 +238,7 @@ public class SegmentMetadataQueryTest
             ),
             "index",
             new ColumnAnalysis(
-                ValueType.FLOAT.toString(),
+                ValueType.DOUBLE.toString(),
                 false,
                 9672,
                 null,
@@ -242,8 +246,8 @@ public class SegmentMetadataQueryTest
                 null,
                 null
             )
-        // null_column will be included only for incremental index, which makes a little bigger result than expected
-        ), mmap2 ? 123969 : 124664,
+            // null_column will be included only for incremental index, which makes a little bigger result than expected
+        ), mmap2 ? 167493 : 168188,
         1209,
         null,
         null,
@@ -537,7 +541,7 @@ public class SegmentMetadataQueryTest
             ),
             "index",
             new ColumnAnalysis(
-                ValueType.FLOAT.toString(),
+                ValueType.DOUBLE.toString(),
                 false,
                 9672 * 2,
                 null,
@@ -1092,12 +1096,56 @@ public class SegmentMetadataQueryTest
                                                 .toInclude(new ListColumnIncluderator(Arrays.asList("fo", "o")))
                                                 .build();
 
-    final byte[] oneColumnQueryCacheKey = new SegmentMetadataQueryQueryToolChest(null).getCacheStrategy(oneColumnQuery)
-                                                                                      .computeCacheKey(oneColumnQuery);
+    final byte[] oneColumnQueryCacheKey = new SegmentMetadataQueryQueryToolChest(new SegmentMetadataQueryConfig()).getCacheStrategy(
+        oneColumnQuery)
+                                                                                                                  .computeCacheKey(
+                                                                                                                      oneColumnQuery);
 
-    final byte[] twoColumnQueryCacheKey = new SegmentMetadataQueryQueryToolChest(null).getCacheStrategy(twoColumnQuery)
-                                                                                      .computeCacheKey(twoColumnQuery);
+    final byte[] twoColumnQueryCacheKey = new SegmentMetadataQueryQueryToolChest(new SegmentMetadataQueryConfig()).getCacheStrategy(
+        twoColumnQuery)
+                                                                                                                  .computeCacheKey(
+                                                                                                                      twoColumnQuery);
 
     Assert.assertFalse(Arrays.equals(oneColumnQueryCacheKey, twoColumnQueryCacheKey));
   }
+
+  @Test
+  public void testAnanlysisTypesBeingSet()
+  {
+
+    SegmentMetadataQuery query1 = Druids.newSegmentMetadataQueryBuilder()
+                                        .dataSource("testing")
+                                        .toInclude(new ListColumnIncluderator(Arrays.asList("foo")))
+                                        .build();
+
+    SegmentMetadataQuery query2 = Druids.newSegmentMetadataQueryBuilder()
+                                        .dataSource("testing")
+                                        .toInclude(new ListColumnIncluderator(Arrays.asList("foo")))
+                                        .analysisTypes(SegmentMetadataQuery.AnalysisType.MINMAX)
+                                        .build();
+
+    SegmentMetadataQueryConfig emptyCfg = new SegmentMetadataQueryConfig();
+    SegmentMetadataQueryConfig analysisCfg = new SegmentMetadataQueryConfig();
+    analysisCfg.setDefaultAnalysisTypes(EnumSet.of(SegmentMetadataQuery.AnalysisType.CARDINALITY));
+
+    EnumSet<SegmentMetadataQuery.AnalysisType> analysis1 = query1.withFinalizedAnalysisTypes(emptyCfg)
+                                                                 .getAnalysisTypes();
+    EnumSet<SegmentMetadataQuery.AnalysisType> analysis2 = query2.withFinalizedAnalysisTypes(emptyCfg)
+                                                                 .getAnalysisTypes();
+    EnumSet<SegmentMetadataQuery.AnalysisType> analysisWCfg1 = query1.withFinalizedAnalysisTypes(analysisCfg)
+                                                                     .getAnalysisTypes();
+    EnumSet<SegmentMetadataQuery.AnalysisType> analysisWCfg2 = query2.withFinalizedAnalysisTypes(analysisCfg)
+                                                                     .getAnalysisTypes();
+
+    EnumSet<SegmentMetadataQuery.AnalysisType> expectedAnalysis1 = new SegmentMetadataQueryConfig().getDefaultAnalysisTypes();
+    EnumSet<SegmentMetadataQuery.AnalysisType> expectedAnalysis2 = EnumSet.of(SegmentMetadataQuery.AnalysisType.MINMAX);
+    EnumSet<SegmentMetadataQuery.AnalysisType> expectedAnalysisWCfg1 = EnumSet.of(SegmentMetadataQuery.AnalysisType.CARDINALITY);
+    EnumSet<SegmentMetadataQuery.AnalysisType> expectedAnalysisWCfg2 = EnumSet.of(SegmentMetadataQuery.AnalysisType.MINMAX);
+
+    Assert.assertEquals(analysis1, expectedAnalysis1);
+    Assert.assertEquals(analysis2, expectedAnalysis2);
+    Assert.assertEquals(analysisWCfg1, expectedAnalysisWCfg1);
+    Assert.assertEquals(analysisWCfg2, expectedAnalysisWCfg2);
+  }
+
 }

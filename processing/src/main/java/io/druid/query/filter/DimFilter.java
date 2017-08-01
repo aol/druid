@@ -32,6 +32,7 @@ import io.druid.java.util.common.Cacheable;
     @JsonSubTypes.Type(name="or", value=OrDimFilter.class),
     @JsonSubTypes.Type(name="not", value=NotDimFilter.class),
     @JsonSubTypes.Type(name="selector", value=SelectorDimFilter.class),
+    @JsonSubTypes.Type(name="columnComparison", value=ColumnComparisonDimFilter.class),
     @JsonSubTypes.Type(name="extraction", value=ExtractionDimFilter.class),
     @JsonSubTypes.Type(name="regex", value=RegexDimFilter.class),
     @JsonSubTypes.Type(name="search", value=SearchQueryDimFilter.class),
@@ -40,7 +41,8 @@ import io.druid.java.util.common.Cacheable;
     @JsonSubTypes.Type(name="in", value=InDimFilter.class),
     @JsonSubTypes.Type(name="bound", value=BoundDimFilter.class),
     @JsonSubTypes.Type(name="interval", value=IntervalDimFilter.class),
-    @JsonSubTypes.Type(name="like", value=LikeDimFilter.class)
+    @JsonSubTypes.Type(name="like", value=LikeDimFilter.class),
+    @JsonSubTypes.Type(name="expression", value=ExpressionDimFilter.class)
 })
 public interface DimFilter extends Cacheable
 {

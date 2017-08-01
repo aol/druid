@@ -102,7 +102,7 @@ public class HyperUniquesSerde extends ComplexMetricSerde
       ByteBuffer byteBuffer, ColumnBuilder columnBuilder
   )
   {
-    final GenericIndexed column = GenericIndexed.read(byteBuffer, getObjectStrategy());
+    final GenericIndexed column = GenericIndexed.read(byteBuffer, getObjectStrategy(), columnBuilder.getFileMapper());
     columnBuilder.setComplexColumn(new ComplexColumnPartSupplier(getTypeName(), column));
   }
 
@@ -120,6 +120,8 @@ public class HyperUniquesSerde extends ComplexMetricSerde
       @Override
       public HyperLogLogCollector fromByteBuffer(ByteBuffer buffer, int numBytes)
       {
+        // make a copy of buffer, because the given buffer is not duplicated in HyperLogLogCollector.makeCollector() and
+        // stored in a field.
         final ByteBuffer readOnlyBuffer = buffer.asReadOnlyBuffer();
         readOnlyBuffer.limit(readOnlyBuffer.position() + numBytes);
         return HyperLogLogCollector.makeCollector(readOnlyBuffer);
