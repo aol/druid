@@ -68,6 +68,7 @@
         <jersey.version>1.19.3</jersey.version>
         <!-- Watch out for Hadoop compatibility when updating to >= 2.5; see https://github.com/druid-io/druid/pull/1669 -->
         <jackson.version>2.4.6</jackson.version>
+        <jackson.databind.version>2.4.6.1</jackson.databind.version>
         <log4j.version>2.5</log4j.version>
         <!-- Update to Netty 4.1 is not possible yet, see https://github.com/druid-io/druid/issues/4390 and comments
              in https://github.com/druid-io/druid/pull/4973 -->
@@ -147,6 +148,11 @@
     <dependencyManagement>
         <dependencies>
             <!-- Compile Scope -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.databind.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.metamx</groupId>
                 <artifactId>java-util</artifactId>
@@ -360,11 +366,6 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-core</artifactId>
-                <version>${jackson.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.fasterxml.jackson.core</groupId>
-                <artifactId>jackson-databind</artifactId>
                 <version>${jackson.version}</version>
             </dependency>
             <dependency>
